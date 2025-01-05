@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700;1,900&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+
+html,body {
+  margin: 0;
+  padding: 0;
+  background: #05101c;
+  color: white;
+  font-family: "Work Sans", serif;
+}
+.image-inverted{
+  filter: invert(100%)
+}
+
+.nav-link {
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 10px; /* Adjust this as needed */
+  margin-left: 10px;
+  padding: 8px 20px;
+  border-radius: 10px;
+  text-decoration: none;
+  letter-spacing: 1px;
+  display: inline-block; /* Ensures links are treated as blocks to prevent overlap */
+}
+
+
+.MuiOutlinedInput-notchedOutline,.MuiInputBase-root.MuiOutlinedInput-root  {
+  border-color: white !important;
+}
