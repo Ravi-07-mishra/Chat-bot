@@ -11,7 +11,8 @@ const createToken = (id, email, expiresIn) => {
 
 const verifyToken = async (req, res, next) => {
   try {
-    const token = req.signedCookies[COOKIE_NAME];
+    const token = req.signedCookies[COOKIE_NAME] || req.headers.authorization?.split(" ")[1];
+
 
     if (!token || token.trim() === "") {
       return res.status(401).json({ message: "Token not received" });

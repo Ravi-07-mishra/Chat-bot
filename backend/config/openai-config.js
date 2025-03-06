@@ -1,12 +1,9 @@
-const {Configuration} =  require('openai')
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const configureOpenAi = ()=>{
+const genAIBackend = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
+const configureGenAI = () => {
+  return genAIBackend;
+};
 
-   const config = new Configuration({
-apiKey: process.env.OPEN_AI_SECRET,
-organization : process.env.OPENAI_ORGANIZATION_ID,
-   })
-}
-
-module.exports = {configureOpenAi}
+module.exports = { configureGenAI };
