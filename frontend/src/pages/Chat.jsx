@@ -8,13 +8,24 @@ import { MdSend, MdDelete } from "react-icons/md"
 import Chatitem from "../components/chat/Chatitem"
 import { sendGeminiChatRequest } from "../helpers/api-communicator"
 
+import { useNavigate } from "react-router-dom"
+
 const Chat = () => {
   const auth = useAuth()
+// Initialize the router
   const inputRef = useRef(null)
   const chatContainerRef = useRef(null)
   const [chats, setChats] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const navigate = useNavigate();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!auth?.isLoggedIn) {
+      navigate("/login");
+    }
+  }, [auth?.isLoggedIn, navigate]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -302,4 +313,3 @@ const Chat = () => {
 }
 
 export default Chat
-

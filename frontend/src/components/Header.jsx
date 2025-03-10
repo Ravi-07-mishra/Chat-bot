@@ -25,13 +25,34 @@ const Header = () => {
                 text="Go to chat"
                 textColor="black"
               />
-              <NavigationLink
-                bg="#51538f"
-                to="/"
-                text="logout"
-                textColor="white"
-                OnClick={auth.logout}
-              />
+<button
+  style={{
+    backgroundColor: "#51538f",
+    color: "#fff",
+    border: "none",
+    padding: "10px 20px",
+    cursor: "pointer",
+    borderRadius: "8px",
+    fontSize: "16px",
+    fontWeight: 600,
+    transition: "background-color 0.3s ease, transform 0.2s ease",
+    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
+  }}
+  onClick={auth.logout}
+  onMouseEnter={(e) => {
+    e.target.style.backgroundColor = "#42436c";
+    e.target.style.transform = "scale(1.02)";
+  }}
+  onMouseLeave={(e) => {
+    e.target.style.backgroundColor = "#51538f";
+    e.target.style.transform = "scale(1)";
+  }}
+>
+  Logout
+</button>
+
+
+
             </>
           ) : (
             <>

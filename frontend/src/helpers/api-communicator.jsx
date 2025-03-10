@@ -48,7 +48,7 @@ export const checkAuthStatus = async () => {
   try {
     const res = await axios.get("/user/auth-status", {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+        Authorization: `Bearer ${localStorage.getItem("bot_token")}`,
       },
     });
     if (res.status !== 200) {

@@ -1,9 +1,10 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { checkAuthStatus, loginUser ,signupUser} from "../../helpers/api-communicator";
-
+import axios from "axios";
 const AuthContext = createContext(null);
-
+import { redirect, useNavigate } from "react-router-dom";
 export const AuthProvider = ({ children }) => {
+
   const [user, setUser] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
@@ -41,11 +42,24 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await logoutUser();
-    setIsLoggedIn(false);
-    setUser(null);
-    window.location.reload();
+    try {
+      const res = await axios.post('/user/logout', {}, { withCredentials: true });
+  
+      if (res.status === 200) {
+        // Clear local storage and reset user
+        localStorage.removeItem("bot_token");
+        setIsLoggedIn(false);
+        setUser(null);
+  
+        // Navigate only after successful logout
+        redirect('/login');
+      }
+    } catch (error) {
+      console.error("Logout failed:", error.message);
+    }
   };
+  
+  
 
   const value = {
     user,

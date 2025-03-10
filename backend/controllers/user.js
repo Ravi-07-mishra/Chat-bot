@@ -27,7 +27,7 @@ try {
   const user = new User({name,email,password:hash});
   await user.save();
   // TOKEN WAS CREATED AND COOKIE WAS SAVED AFTER THIS
-  res.clearCookie("auth_token",{path: "/", domain: "localhost",
+  res.clearCookie("bot_token",{path: "/", domain: "localhost",
     httpOnly: true,
     signed: true,
   });
@@ -58,7 +58,7 @@ try {
   if(!iscorrect){
     return res.status(403).send("Incorrect Password")
   }
-  res.clearCookie("auth_token",{path: "/", domain: "localhost",
+  res.clearCookie("bot_token",{path: "/", domain: "localhost",
     httpOnly: true,
     signed: true,
   });
@@ -99,6 +99,34 @@ console.log(user._id.toString(),res.locals.jwtData.id)
     })
 }
 }
+const logoutuser = async (req, res) => {
+  try {
+    if (req.signedCookies[COOKIE_NAME]) {
+      // Clear the cookie from the client
+      res.clearCookie(COOKIE_NAME, {
+        path: '/',
+        domain: "localhost",  // Include the domain option here
+        httpOnly: true,
+        signed: true,
+        sameSite: 'strict',
+      });
+      
+    }
+
+    // Send a success response
+    return res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error logging out'
+    });
+  }
+};
 
 
-module.exports = {getAllusers,userSignup,userLogin,verifyUser}
+module.exports = {getAllusers,userSignup,userLogin,verifyUser,logoutuser}
