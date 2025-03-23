@@ -1,36 +1,45 @@
-const mongoose = require('mongoose');
-const { randomUUID } = require('crypto');  // Correct import
+// models/User.js
+const mongoose = require("mongoose");
+const { randomUUID } = require("crypto");
 
-const chatSchema = new mongoose.Schema({
-    id: {
-        type: String,
-        default: randomUUID,  // Correct usage of randomUUID()
-    },
-    role: {
-        type: String,
-        required: true,
-    },
-    content: {
-        type: String,
-        required: true,
-    }
+const messageSchema = new mongoose.Schema({
+  role: {
+    type: String,
+    required: true,
+  },
+  content: {
+    type: String,
+    required: true,
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const conversationSchema = new mongoose.Schema({
+  conversationId: {
+    type: String,
+    default: randomUUID, // Unique ID for each conversation
+  },
+  messages: [messageSchema],
 });
 
 const userSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true,
-    },
-    email: {
-        type: String,
-        required: true,
-        unique: true,
-    },
-    password: {
-        type: String,
-        required: true,
-    },
-    chats: [chatSchema],
+  name: {
+    type: String,
+    required: true,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+  conversations: [conversationSchema],
 });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model("User", userSchema);

@@ -1,187 +1,181 @@
 "use client"
 
-import { Avatar, Box, Button, IconButton, Typography, CircularProgress, Snackbar, Alert } from "@mui/material"
-import { useRef, useState, useEffect } from "react"
-import { useAuth } from "../assets/context/AuthContext"
-import { red, teal } from "@mui/material/colors"
-import { MdSend, MdDelete } from "react-icons/md"
-import Chatitem from "../components/chat/Chatitem"
-import { sendGeminiChatRequest } from "../helpers/api-communicator"
-
-import { useNavigate } from "react-router-dom"
+import { Avatar, Box, Button, IconButton, Typography, CircularProgress, Snackbar, Alert, Divider } from "@mui/material";
+import { useRef, useState, useEffect } from "react";
+import { useAuth } from "../assets/context/AuthContext";
+import { red, teal } from "@mui/material/colors";
+import { MdSend } from "react-icons/md";
+import Chatitem from "../components/chat/Chatitem";
+import { useNavigate } from "react-router-dom";
 
 const Chat = () => {
-  const auth = useAuth()
-// Initialize the router
-  const inputRef = useRef(null)
-  const chatContainerRef = useRef(null)
-  const [chats, setChats] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const auth = useAuth();
+  const inputRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const [currentConversation, setCurrentConversation] = useState(null); // full conversation object
+  const [conversationSummaries, setConversationSummaries] = useState([]); // sidebar summaries
+  const [loading, setLoading] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(false);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Redirect to login if not authenticated
+  // Redirect if not authenticated
   useEffect(() => {
     if (!auth?.isLoggedIn) {
       navigate("/login");
     }
   }, [auth?.isLoggedIn, navigate]);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll chat area
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
-  }, [chats])
+  }, [currentConversation]);
 
-  const handleSubmit = async () => {
-    const content = inputRef.current?.value?.trim()
-    if (!content) return
-
-    if (inputRef && inputRef.current) {
-      inputRef.current.value = ""
-    }
-
-    const newMessage = { role: "user", content }
-    setChats((prev) => [...prev, newMessage])
-    setLoading(true)
-    setError(null)
-
-    // Send the user message to the Gemini API
+  // Load conversation summaries for sidebar
+  const loadConversationSummaries = async () => {
+    setLoadingConversations(true);
+    setError(null);
     try {
-      const chatData = await sendGeminiChatRequest(content)
-      setChats((prev) => [...prev, { role: "model", content: chatData }])
+      const response = await fetch("/api/v1/chat/conversations", {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setConversationSummaries(data.conversations);
+      } else {
+        setError(data.message || "Failed to load conversations.");
+      }
     } catch (error) {
-      console.error("Error handling chat submission:", error)
-      setError("Failed to get response. Please try again.")
+      console.error("Error loading conversation summaries:", error);
+      setError("Failed to load conversations. Please try again.");
     } finally {
-      setLoading(false)
+      setLoadingConversations(false);
     }
-  }
+  };
+
+  // Load full conversation by id
+  const loadConversation = async (conversationId) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/chat/conversations/${conversationId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setCurrentConversation(data.conversation);
+      } else {
+        setError(data.message || "Failed to load conversation.");
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      setError("Failed to load conversation. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // When sending a new message, use the current conversation id if available.
+  // If no conversation is selected, a new conversation is created.
+  const handleSubmit = async () => {
+    const content = inputRef.current?.value?.trim();
+    if (!content) return;
+    if (inputRef && inputRef.current) {
+      inputRef.current.value = "";
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const bodyPayload = { message: content };
+      if (currentConversation?.conversationId) {
+        bodyPayload.conversationId = currentConversation.conversationId;
+      }
+      const response = await fetch("/api/v1/chat/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyPayload),
+      });
+      const data = await response.json();
+      if (response.ok) {
+        // Update current conversation with the returned conversation object
+        setCurrentConversation(data.conversation);
+        // Reload conversation summaries
+        loadConversationSummaries();
+      } else {
+        setError(data.message || "Failed to get response. Please try again.");
+      }
+    } catch (error) {
+      console.error("Error handling chat submission:", error);
+      setError("Failed to get response. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit()
+      e.preventDefault();
+      handleSubmit();
     }
-  }
+  };
 
-  const clearConversation = () => {
-    setChats([])
-  }
+  // Start a new conversation
+  const startNewConversation = () => {
+    setCurrentConversation({ conversationId: null, messages: [] });
+  };
+
+  // Render messages for the current conversation
+  const renderChatItems = () => {
+    if (!currentConversation || !currentConversation.messages) return null;
+    return currentConversation.messages.map((msg, i) => (
+      <Chatitem key={i} content={msg.content} role={msg.role} />
+    ));
+  };
+
+  // Load conversation summaries on component mount
+  useEffect(() => {
+    loadConversationSummaries();
+  }, []);
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        flex: 1,
-        width: "100%",
-        height: "100%",
-        mt: 3,
-        gap: 3,
-        backgroundColor: "rgb(7, 15, 25)",
-        borderRadius: 2,
-        p: 2,
-      }}
-    >
-      {/* Sidebar */}
-      <Box
-        sx={{
-          display: { md: "flex", xs: "none", sm: "none" },
-          flex: 0.2,
-          flexDirection: "column",
-        }}
-      >
-        <Box
-          sx={{
-            display: "flex",
-            width: "100%",
-            height: "70vh",
-            bgcolor: "rgb(17,29,39)",
-            borderRadius: 3,
-            flexDirection: "column",
-            mx: 3,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            transition: "all 0.3s ease",
-            "&:hover": {
-              boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-            },
-          }}
-        >
-          <Avatar
-            sx={{
-              mx: "auto",
-              my: 2,
-              bgcolor: teal[700],
-              color: "white",
-              fontWeight: 700,
-              width: 56,
-              height: 56,
-              fontSize: "1.5rem",
-              boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-            }}
-          >
-            {auth?.user?.name ? auth?.user?.name[0] : ""}
-            {auth?.user?.name?.split(" ")[1]?.[0] || ""}
-          </Avatar>
-          <Typography
-            sx={{
-              mx: "auto",
-              fontFamily: "work sans",
-              fontSize: "1.2rem",
-              fontWeight: 500,
-              color: teal[100],
-            }}
-          >
-            You are talking to a ChatBot
-          </Typography>
-          <Typography
-            sx={{
-              mx: "auto",
-              fontFamily: "work sans",
-              my: 4,
-              p: 3,
-              color: "rgba(255,255,255,0.8)",
-              lineHeight: 1.6,
-            }}
-          >
-            You can ask questions related to knowledge, business, advice, education, etc. Avoid sharing personal
-            information.
-          </Typography>
-          <Button
-            startIcon={<MdDelete />}
-            onClick={clearConversation}
-            sx={{
-              width: "200px",
-              my: "auto",
-              color: "white",
-              fontWeight: "700",
-              borderRadius: 3,
-              mx: "auto",
-              bgcolor: red[400],
-              py: 1.2,
-              transition: "all 0.2s ease",
-              ":hover": {
-                bgcolor: red[600],
-                transform: "translateY(-2px)",
-              },
-            }}
-          >
-            Clear Conversation
-          </Button>
-        </Box>
+    <Box sx={{ display: "flex", flex: 1, width: "100%", height: "100%", mt: 3, gap: 3, backgroundColor: "rgb(7, 15, 25)", borderRadius: 2, p: 2 }}>
+      {/* Sidebar with conversation summaries */}
+      <Box sx={{ display: { md: "flex", xs: "none" }, flex: 0.3, flexDirection: "column", borderRight: "1px solid #333", pr: 2 }}>
+        <Button onClick={startNewConversation} sx={{ mb: 2, bgcolor: teal[700], color: "white", borderRadius: 2, ":hover": { bgcolor: teal[600] } }}>
+          New Conversation
+        </Button>
+        {loadingConversations ? (
+          <CircularProgress size={24} sx={{ color: "white" }} />
+        ) : conversationSummaries.length === 0 ? (
+          <Typography color="white">No conversations found</Typography>
+        ) : (
+          conversationSummaries.map((summary) => (
+            <Box
+              key={summary.conversationId}
+              sx={{
+                p: 1,
+                mb: 1,
+                cursor: "pointer",
+                bgcolor: "#222",
+                borderRadius: 1,
+                "&:hover": { bgcolor: "#333" },
+              }}
+              onClick={() => loadConversation(summary.conversationId)}
+            >
+              <Typography variant="body2" color="white">
+                {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
+              </Typography>
+            </Box>
+          ))
+        )}
       </Box>
 
       {/* Chat Area */}
-      <Box
-        sx={{
-          display: "flex",
-          flex: { md: 0.8, xs: 1, sm: 1 },
-          flexDirection: "column",
-          px: 3,
-          width: "100%",
-        }}
-      >
+      <Box sx={{ display: "flex", flex: { md: 0.7, xs: 1 }, flexDirection: "column", px: 3, width: "100%" }}>
         <Typography
           sx={{
             textAlign: "center",
@@ -195,10 +189,9 @@ const Chat = () => {
             WebkitTextFillColor: "transparent",
           }}
         >
-          Model - Gemini Pro
+          Chat with Gemini Pro
         </Typography>
 
-        {/* Chat Messages */}
         <Box
           ref={chatContainerRef}
           sx={{
@@ -208,38 +201,24 @@ const Chat = () => {
             mx: "auto",
             display: "flex",
             flexDirection: "column",
-            overflow: "scroll",
-            overflowX: "hidden",
             overflowY: "auto",
-            scrollBehavior: "smooth",
             bgcolor: "rgba(17,27,39,0.3)",
             boxShadow: "inset 0 2px 10px rgba(0,0,0,0.2)",
             p: 1,
           }}
         >
-          {chats.length === 0 && (
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                opacity: 0.7,
-              }}
-            >
+          {currentConversation && currentConversation.messages && currentConversation.messages.length > 0 ? (
+            renderChatItems()
+          ) : (
+            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", opacity: 0.7 }}>
               <Typography color="white" variant="h6" sx={{ textAlign: "center" }}>
-                Start a conversation with Gemini Pro
+                Start a conversation
               </Typography>
               <Typography color="gray" variant="body2" sx={{ textAlign: "center", mt: 1 }}>
                 Type a message below to begin
               </Typography>
             </Box>
           )}
-
-          {chats.map((chat, index) => (
-            <Chatitem key={index} content={chat.content} role={chat.role} />
-          ))}
 
           {loading && (
             <Box sx={{ display: "flex", p: 2, bgcolor: "#004d56", gap: 2, alignItems: "center" }}>
@@ -284,10 +263,7 @@ const Chat = () => {
               ml: "auto",
               color: teal[300],
               transition: "all 0.2s ease",
-              "&:hover": {
-                color: teal[100],
-                transform: "scale(1.1)",
-              },
+              "&:hover": { color: teal[100], transform: "scale(1.1)" },
             }}
             onClick={handleSubmit}
             disabled={loading}
@@ -297,7 +273,6 @@ const Chat = () => {
         </Box>
       </Box>
 
-      {/* Error Snackbar */}
       <Snackbar
         open={!!error}
         autoHideDuration={6000}
@@ -309,7 +284,7 @@ const Chat = () => {
         </Alert>
       </Snackbar>
     </Box>
-  )
-}
+  );
+};
 
-export default Chat
+export default Chat;
