@@ -1,6 +1,6 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-
+import LanguageSwitcher from "./components/LanguageSwicher";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -12,6 +12,7 @@ import Chat from "./pages/Chat";
 function App() {
   return (
     <Router>
+       <LanguageSwitcher />
       <div style={{ border: "2px solid red", minHeight: "100vh" }}>
         <Header />
         <Routes>

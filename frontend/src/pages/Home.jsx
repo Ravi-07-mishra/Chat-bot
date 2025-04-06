@@ -1,15 +1,17 @@
-import { Bot, MessageSquare, Sparkles } from "lucide-react"
+import { Bot, MessageSquare, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const Home = () => {
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white">
       <main className="container mx-auto px-4 py-16">
         <h1 className="text-5xl md:text-7xl font-extrabold text-center mb-8 bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-emerald-400 animate-gradient">
-          Welcome to AI Chat
+          {t("welcome")}
         </h1>
-
         <p className="text-xl md:text-2xl text-center mb-16 text-gray-300 max-w-3xl mx-auto">
-          Experience the future of conversation with our advanced AI chatbot
+          {t("description")}
           <Sparkles className="inline-block ml-2 text-yellow-400" />
         </p>
 
@@ -37,13 +39,11 @@ const Home = () => {
           />
         </div>
       </main>
-
       <footer className="text-center py-8 text-gray-400">
-        <p>&copy; 2023 AI Chat. All rights reserved.</p>
+        <p>&copy; 2023 {t("appName")}. {t("rights")}</p>
       </footer>
     </div>
-  )
-}
+  );
+};
 
-export default Home
-
+export default Home;

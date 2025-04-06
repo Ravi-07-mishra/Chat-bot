@@ -1,6 +1,9 @@
-"use client"
+"use client";
 
-import { Avatar, Box, Button, IconButton, Typography, CircularProgress, Snackbar, Alert, Divider } from "@mui/material";
+import { 
+  Avatar, Box, Button, IconButton, Typography, 
+  CircularProgress, Snackbar, Alert 
+} from "@mui/material";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "../assets/context/AuthContext";
 import { red, teal } from "@mui/material/colors";
@@ -8,16 +11,29 @@ import { MdSend } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 
+// Helper function for API calls
+const fetchAPI = async (url, options = {}) => {
+  const response = await fetch(url, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.message || "API call failed");
+  }
+  return data;
+};
+
 const Chat = () => {
   const auth = useAuth();
+  const navigate = useNavigate();
   const inputRef = useRef(null);
   const chatContainerRef = useRef(null);
-  const [currentConversation, setCurrentConversation] = useState(null); // full conversation object
-  const [conversationSummaries, setConversationSummaries] = useState([]); // sidebar summaries
+  const [currentConversation, setCurrentConversation] = useState(null);
+  const [conversationSummaries, setConversationSummaries] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
-  const navigate = useNavigate();
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -26,98 +42,72 @@ const Chat = () => {
     }
   }, [auth?.isLoggedIn, navigate]);
 
-  // Auto-scroll chat area
+  // Auto-scroll chat area when new messages arrive
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [currentConversation]);
 
-  // Load conversation summaries for sidebar
+  // Load conversation summaries for the sidebar
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
     try {
-      const response = await fetch("/api/v1/chat/conversations", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setConversationSummaries(data.conversations);
-      } else {
-        setError(data.message || "Failed to load conversations.");
-      }
-    } catch (error) {
-      console.error("Error loading conversation summaries:", error);
-      setError("Failed to load conversations. Please try again.");
+      const data = await fetchAPI("/api/v1/chat/conversations");
+      setConversationSummaries(data.conversations);
+    } catch (err) {
+      console.error("Error loading conversation summaries:", err);
+      setError(err.message);
     } finally {
       setLoadingConversations(false);
     }
   };
 
-  // Load full conversation by id
+  // Load a full conversation by its id
   const loadConversation = async (conversationId) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/v1/chat/conversations/${conversationId}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await response.json();
-      if (response.ok) {
-        setCurrentConversation(data.conversation);
-      } else {
-        setError(data.message || "Failed to load conversation.");
-      }
-    } catch (error) {
-      console.error("Error loading conversation:", error);
-      setError("Failed to load conversation. Please try again.");
+      const data = await fetchAPI(`/api/v1/chat/conversations/${conversationId}`);
+      setCurrentConversation(data.conversation);
+    } catch (err) {
+      console.error("Error loading conversation:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // When sending a new message, use the current conversation id if available.
-  // If no conversation is selected, a new conversation is created.
+  // Handle message submission
   const handleSubmit = async () => {
     const content = inputRef.current?.value?.trim();
     if (!content) return;
-    if (inputRef && inputRef.current) {
-      inputRef.current.value = "";
-    }
+    inputRef.current.value = "";
     setLoading(true);
     setError(null);
     try {
-      const bodyPayload = { message: content };
+      const payload = { message: content };
       if (currentConversation?.conversationId) {
-        bodyPayload.conversationId = currentConversation.conversationId;
+        payload.conversationId = currentConversation.conversationId;
       }
-      const response = await fetch("/api/v1/chat/new", {
+      const data = await fetchAPI("/api/v1/chat/new", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(bodyPayload),
+        body: JSON.stringify(payload),
       });
-      const data = await response.json();
-      if (response.ok) {
-        // Update current conversation with the returned conversation object
-        setCurrentConversation(data.conversation);
-        // Reload conversation summaries
-        loadConversationSummaries();
-      } else {
-        setError(data.message || "Failed to get response. Please try again.");
-      }
-    } catch (error) {
-      console.error("Error handling chat submission:", error);
-      setError("Failed to get response. Please try again.");
+      setCurrentConversation(data.conversation);
+      // Reload summaries after a successful message send
+      loadConversationSummaries();
+    } catch (err) {
+      console.error("Error handling chat submission:", err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !loading) {
       e.preventDefault();
       handleSubmit();
     }
@@ -128,11 +118,11 @@ const Chat = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
   };
 
-  // Render messages for the current conversation
+  // Render chat messages
   const renderChatItems = () => {
-    if (!currentConversation || !currentConversation.messages) return null;
+    if (!currentConversation?.messages) return null;
     return currentConversation.messages.map((msg, i) => (
-      <Chatitem key={i} content={msg.content} role={msg.role} />
+      <Chatitem key={msg.id || i} content={msg.content} role={msg.role} />
     ));
   };
 
@@ -155,21 +145,46 @@ const Chat = () => {
         ) : (
           conversationSummaries.map((summary) => (
             <Box
-              key={summary.conversationId}
+            key={summary.conversationId}
+            onClick={() => loadConversation(summary.conversationId)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+              p: 2,
+              mb: 1.5,
+              bgcolor: "rgba(255, 255, 255, 0.05)",
+              borderRadius: 3,
+              cursor: "pointer",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+              transition: "all 0.2s ease-in-out",
+              "&:hover": {
+                bgcolor: "rgba(255, 255, 255, 0.1)",
+                transform: "scale(1.02)",
+              },
+            }}
+          >
+            <Avatar
               sx={{
-                p: 1,
-                mb: 1,
-                cursor: "pointer",
-                bgcolor: "#222",
-                borderRadius: 1,
-                "&:hover": { bgcolor: "#333" },
+                width: 32,
+                height: 32,
+                bgcolor: teal[700],
+                fontSize: "14px",
+                fontWeight: 600,
               }}
-              onClick={() => loadConversation(summary.conversationId)}
             >
-              <Typography variant="body2" color="white">
-                {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
-              </Typography>
-            </Box>
+              {summary.lastMessage?.content?.charAt(0)?.toUpperCase() || "?"}
+            </Avatar>
+            <Typography
+              variant="body1"
+              color="white"
+              noWrap
+              sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
+            >
+              {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
+            </Typography>
+          </Box>
+          
           ))
         )}
       </Box>
@@ -222,8 +237,8 @@ const Chat = () => {
 
           {loading && (
             <Box sx={{ display: "flex", p: 2, bgcolor: "#004d56", gap: 2, alignItems: "center" }}>
-              <Avatar sx={{ ml: "0" }}>
-                <img src="openai.png" alt="gemini" width={"30px"} />
+              <Avatar>
+                <img src="openai.png" alt="gemini" width="30px" />
               </Avatar>
               <CircularProgress size={24} sx={{ color: "white" }} />
             </Box>
@@ -257,6 +272,7 @@ const Chat = () => {
             }}
             ref={inputRef}
             onKeyPress={handleKeyPress}
+            disabled={loading}
           />
           <IconButton
             sx={{
