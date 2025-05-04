@@ -7,8 +7,11 @@ const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GOOGLE_API_KEY);
 // List models for debugging purposes (using the correct model ID)
 const listModels = async () => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-002" });
-    console.log("Model initialized:", model);
+    const models = await genAI.listModels();
+    console.log("Available models:");
+    models.models.forEach((model) => {
+      console.log(`- ${model.name}`);
+    });
   } catch (error) {
     console.error("Error while listing models:", error);
   }
@@ -65,6 +68,7 @@ export const checkAuthStatus = async () => {
 export const sendGeminiChatRequest = async (message) => {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-002" });
+
     const chatResponse = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: message }] }],
     });
@@ -100,4 +104,3 @@ export const sendGeminiChatRequest = async (message) => {
     throw error;
   }
 };
-

@@ -1,13 +1,10 @@
 "use client";
 
-import { 
-  Avatar, Box, Button, IconButton, Typography, 
-  CircularProgress, Snackbar, Alert 
-} from "@mui/material";
+import { Avatar, Box, Button, IconButton, Typography, CircularProgress, Snackbar, Alert } from "@mui/material";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "../assets/context/AuthContext";
 import { red, teal } from "@mui/material/colors";
-import { MdSend } from "react-icons/md";
+import { MdSend, MdMic } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 
@@ -34,6 +31,23 @@ const Chat = () => {
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState(null);
+
+  // Initialize speech recognition (Speech-to-Text)
+  useEffect(() => {
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;
+      recognition.onresult = handleSpeechResult;
+      recognition.onerror = handleSpeechError;
+      setSpeechRecognition(recognition);
+    } else {
+      console.warn("Speech Recognition API not supported in this browser.");
+    }
+  }, []);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -126,6 +140,37 @@ const Chat = () => {
     ));
   };
 
+  // Read out the bot's response using SpeechSynthesis
+  const speakResponse = (text) => {
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.lang = 'en-US';
+    window.speechSynthesis.speak(speech);
+  };
+
+  // Handle speech-to-text result
+  const handleSpeechResult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    if (event.results[0].isFinal) {
+      inputRef.current.value = transcript;
+      handleSubmit();
+    }
+  };
+
+  const handleSpeechError = (event) => {
+    console.error("Speech recognition error", event);
+  };
+
+  // Start/Stop speech recognition (Speech-to-Text)
+  const toggleSpeechRecognition = () => {
+    if (isListening) {
+      speechRecognition.stop();
+      setIsListening(false);
+    } else {
+      speechRecognition.start();
+      setIsListening(true);
+    }
+  };
+
   // Load conversation summaries on component mount
   useEffect(() => {
     loadConversationSummaries();
@@ -134,7 +179,7 @@ const Chat = () => {
   return (
     <Box sx={{ display: "flex", flex: 1, width: "100%", height: "100%", mt: 3, gap: 3, backgroundColor: "rgb(7, 15, 25)", borderRadius: 2, p: 2 }}>
       {/* Sidebar with conversation summaries */}
-      <Box sx={{ display: { md: "flex", xs: "none" }, flex: 0.3, flexDirection: "column", borderRight: "1px solid #333", pr: 2 }}>
+      <Box sx={{ display: { md: "flex", xs: "none" }, flex: 0.3, flexDirection: "column", borderRight: "1px solid #333", pr: 2, maxHeight: "85vh", overflowY: "auto" }}>
         <Button onClick={startNewConversation} sx={{ mb: 2, bgcolor: teal[700], color: "white", borderRadius: 2, ":hover": { bgcolor: teal[600] } }}>
           New Conversation
         </Button>
@@ -145,46 +190,45 @@ const Chat = () => {
         ) : (
           conversationSummaries.map((summary) => (
             <Box
-            key={summary.conversationId}
-            onClick={() => loadConversation(summary.conversationId)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-              p: 2,
-              mb: 1.5,
-              bgcolor: "rgba(255, 255, 255, 0.05)",
-              borderRadius: 3,
-              cursor: "pointer",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-              transition: "all 0.2s ease-in-out",
-              "&:hover": {
-                bgcolor: "rgba(255, 255, 255, 0.1)",
-                transform: "scale(1.02)",
-              },
-            }}
-          >
-            <Avatar
+              key={summary.conversationId}
+              onClick={() => loadConversation(summary.conversationId)}
               sx={{
-                width: 32,
-                height: 32,
-                bgcolor: teal[700],
-                fontSize: "14px",
-                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                p: 2,
+                mb: 1.5,
+                bgcolor: "rgba(255, 255, 255, 0.05)",
+                borderRadius: 3,
+                cursor: "pointer",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                transition: "all 0.2s ease-in-out",
+                "&:hover": {
+                  bgcolor: "rgba(255, 255, 255, 0.1)",
+                  transform: "scale(1.02)",
+                },
               }}
             >
-              {summary.lastMessage?.content?.charAt(0)?.toUpperCase() || "?"}
-            </Avatar>
-            <Typography
-              variant="body1"
-              color="white"
-              noWrap
-              sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
-            >
-              {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
-            </Typography>
-          </Box>
-          
+              <Avatar
+                sx={{
+                  width: 32,
+                  height: 32,
+                  bgcolor: teal[700],
+                  fontSize: "14px",
+                  fontWeight: 600,
+                }}
+              >
+                {summary.lastMessage?.content?.charAt(0)?.toUpperCase() || "?"}
+              </Avatar>
+              <Typography
+                variant="body1"
+                color="white"
+                noWrap
+                sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
+              >
+                {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
+              </Typography>
+            </Box>
           ))
         )}
       </Box>
@@ -240,65 +284,35 @@ const Chat = () => {
               <Avatar>
                 <img src="openai.png" alt="gemini" width="30px" />
               </Avatar>
-              <CircularProgress size={24} sx={{ color: "white" }} />
+              <CircularProgress size={20} sx={{ color: "white" }} />
             </Box>
           )}
         </Box>
 
-        {/* Input Area */}
-        <Box
-          sx={{
-            width: "100%",
-            p: 2,
-            mt: 2,
-            bgcolor: "rgb(17,27,39)",
-            display: "flex",
-            borderRadius: 3,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Type your message here..."
-            style={{
-              width: "100%",
-              backgroundColor: "transparent",
-              padding: "10px",
-              border: "none",
-              outline: "none",
-              color: "white",
-              fontSize: "18px",
-              fontFamily: "'Work Sans', sans-serif",
-            }}
+        <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
+          <IconButton onClick={toggleSpeechRecognition} color={isListening ? "secondary" : "primary"}>
+            <MdMic size={28} />
+          </IconButton>
+          <Box
+            component="input"
             ref={inputRef}
             onKeyPress={handleKeyPress}
-            disabled={loading}
-          />
-          <IconButton
             sx={{
-              ml: "auto",
-              color: teal[300],
-              transition: "all 0.2s ease",
-              "&:hover": { color: teal[100], transform: "scale(1.1)" },
+              background: "rgba(255, 255, 255, 0.1)",
+              color: "white",
+              border: "none",
+              borderRadius: 3,
+              p: 1.5,
+              fontSize: "16px",
+              flex: 1,
             }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            <MdSend />
+            placeholder="Type a message"
+          />
+          <IconButton onClick={() => speakResponse(currentConversation?.messages?.[currentConversation.messages.length - 1]?.content)} color="primary">
+            <MdSend size={28} />
           </IconButton>
         </Box>
       </Box>
-
-      <Snackbar
-        open={!!error}
-        autoHideDuration={6000}
-        onClose={() => setError(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert onClose={() => setError(null)} severity="error" sx={{ width: "100%" }}>
-          {error}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };

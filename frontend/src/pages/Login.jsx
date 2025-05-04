@@ -2,12 +2,13 @@ import { Box, Button, Typography } from '@mui/material';
 import React from 'react';
 import CustomizedInput from '../components/shared/CustomizedInput';
 import { RiLoginCircleFill } from "react-icons/ri";
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../assets/context/AuthContext';
 import toast from 'react-hot-toast';
 
 const Login = () => {
   const auth = useAuth();
-
+  const navigate = useNavigate();
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -18,6 +19,8 @@ const Login = () => {
       toast.loading("Signing in", { id: "login" });
       await auth?.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
+      navigate('/chat');
+      
     } catch (error) {
       toast.error("Signing failed", { id: "login" });
       console.error("Login error:", error);
