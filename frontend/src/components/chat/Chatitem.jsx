@@ -22,7 +22,11 @@ const Chatitem = ({ content, role }) => {
                 key={`text-${index}`}
                 color="white"
                 fontSize="18px"
-                sx={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}
+                sx={{
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                }}
               >
                 {segment}
               </Typography>
@@ -40,11 +44,24 @@ const Chatitem = ({ content, role }) => {
             }
           }
           parts.push(
-            <Box key={`code-${index}`} sx={{ my: 2, borderRadius: 2, overflow: "hidden" }}>
+            <Box
+              key={`code-${index}`}
+              sx={{
+                my: 2,
+                borderRadius: 2,
+                overflowX: "auto",
+                maxWidth: "100%",
+              }}
+            >
               <SyntaxHighlighter
                 language={language}
                 style={coldarkDark}
-                customStyle={{ margin: 0, borderRadius: "8px", fontSize: "16px" }}
+                customStyle={{
+                  margin: 0,
+                  borderRadius: "8px",
+                  fontSize: "16px",
+                  minWidth: "100%",
+                }}
               >
                 {code}
               </SyntaxHighlighter>
@@ -59,7 +76,11 @@ const Chatitem = ({ content, role }) => {
       <Typography
         color="white"
         fontSize="18px"
-        sx={{ lineHeight: 1.6, whiteSpace: "pre-wrap" }}
+        sx={{
+          lineHeight: 1.6,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
       >
         {message}
       </Typography>
@@ -71,6 +92,7 @@ const Chatitem = ({ content, role }) => {
       elevation={0}
       sx={{
         display: "flex",
+        flexDirection: { xs: "column", sm: "row" },
         p: 2,
         bgcolor: isBot ? "rgba(0, 77, 86, 0.8)" : "rgba(0, 77, 86, 0.1)",
         my: 1.5,
@@ -80,13 +102,15 @@ const Chatitem = ({ content, role }) => {
         "&:hover": {
           bgcolor: isBot ? "rgba(0, 77, 86, 0.9)" : "rgba(0, 77, 86, 0.2)",
         },
+        width: "100%",
+        overflowWrap: "break-word",
       }}
     >
       <Avatar
         sx={{
-          ml: 0,
           bgcolor: isBot ? teal[700] : grey[900],
           boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+          alignSelf: { xs: "flex-start", sm: "center" },
         }}
       >
         {isBot ? (
@@ -95,9 +119,7 @@ const Chatitem = ({ content, role }) => {
           auth?.user?.name?.[0] || ""
         )}
       </Avatar>
-      <Box sx={{ flex: 1 }}>
-        {formatMessage(content)}
-      </Box>
+      <Box sx={{ flex: 1, overflow: "hidden" }}>{formatMessage(content)}</Box>
     </Paper>
   );
 };

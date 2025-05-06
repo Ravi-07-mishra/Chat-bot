@@ -1,6 +1,13 @@
 "use client";
 
-import { Avatar, Box, Button, IconButton, Typography, CircularProgress, Snackbar, Alert } from "@mui/material";
+import {
+  Avatar,
+  Box,
+  Button,
+  IconButton,
+  Typography,
+  CircularProgress,
+} from "@mui/material";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "../assets/context/AuthContext";
 import { red, teal } from "@mui/material/colors";
@@ -8,7 +15,6 @@ import { MdSend, MdMic } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 
-// Helper function for API calls
 const fetchAPI = async (url, options = {}) => {
   const response = await fetch(url, {
     headers: { "Content-Type": "application/json" },
@@ -34,12 +40,12 @@ const Chat = () => {
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  // Initialize speech recognition (Speech-to-Text)
   useEffect(() => {
-    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
+      const SpeechRecognitionAPI =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognitionAPI();
-      recognition.lang = 'en-US';
+      recognition.lang = "en-US";
       recognition.interimResults = true;
       recognition.onresult = handleSpeechResult;
       recognition.onerror = handleSpeechError;
@@ -49,21 +55,19 @@ const Chat = () => {
     }
   }, []);
 
-  // Redirect if not authenticated
   useEffect(() => {
     if (!auth?.isLoggedIn) {
       navigate("/login");
     }
   }, [auth?.isLoggedIn, navigate]);
 
-  // Auto-scroll chat area when new messages arrive
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
     }
   }, [currentConversation]);
 
-  // Load conversation summaries for the sidebar
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -78,12 +82,13 @@ const Chat = () => {
     }
   };
 
-  // Load a full conversation by its id
   const loadConversation = async (conversationId) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAPI(`/api/v1/chat/conversations/${conversationId}`);
+      const data = await fetchAPI(
+        `/api/v1/chat/conversations/${conversationId}`
+      );
       setCurrentConversation(data.conversation);
     } catch (err) {
       console.error("Error loading conversation:", err);
@@ -93,7 +98,6 @@ const Chat = () => {
     }
   };
 
-  // Handle message submission
   const handleSubmit = async () => {
     const content = inputRef.current?.value?.trim();
     if (!content) return;
@@ -110,7 +114,6 @@ const Chat = () => {
         body: JSON.stringify(payload),
       });
       setCurrentConversation(data.conversation);
-      // Reload summaries after a successful message send
       loadConversationSummaries();
     } catch (err) {
       console.error("Error handling chat submission:", err);
@@ -127,12 +130,10 @@ const Chat = () => {
     }
   };
 
-  // Start a new conversation
   const startNewConversation = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
   };
 
-  // Render chat messages
   const renderChatItems = () => {
     if (!currentConversation?.messages) return null;
     return currentConversation.messages.map((msg, i) => (
@@ -140,14 +141,12 @@ const Chat = () => {
     ));
   };
 
-  // Read out the bot's response using SpeechSynthesis
   const speakResponse = (text) => {
     const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = 'en-US';
+    speech.lang = "en-US";
     window.speechSynthesis.speak(speech);
   };
 
-  // Handle speech-to-text result
   const handleSpeechResult = (event) => {
     const transcript = event.results[0][0].transcript;
     if (event.results[0].isFinal) {
@@ -160,7 +159,6 @@ const Chat = () => {
     console.error("Speech recognition error", event);
   };
 
-  // Start/Stop speech recognition (Speech-to-Text)
   const toggleSpeechRecognition = () => {
     if (isListening) {
       speechRecognition.stop();
@@ -171,16 +169,48 @@ const Chat = () => {
     }
   };
 
-  // Load conversation summaries on component mount
   useEffect(() => {
     loadConversationSummaries();
   }, []);
 
   return (
-    <Box sx={{ display: "flex", flex: 1, width: "100%", height: "100%", mt: 3, gap: 3, backgroundColor: "rgb(7, 15, 25)", borderRadius: 2, p: 2 }}>
-      {/* Sidebar with conversation summaries */}
-      <Box sx={{ display: { md: "flex", xs: "none" }, flex: 0.3, flexDirection: "column", borderRight: "1px solid #333", pr: 2, maxHeight: "85vh", overflowY: "auto" }}>
-        <Button onClick={startNewConversation} sx={{ mb: 2, bgcolor: teal[700], color: "white", borderRadius: 2, ":hover": { bgcolor: teal[600] } }}>
+    <Box
+      sx={{
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" },
+        width: "100%",
+        height: "100%",
+        mt: 3,
+        gap: 3,
+        backgroundColor: "rgb(7, 15, 25)",
+        borderRadius: 2,
+        p: { xs: 1.5, sm: 2 },
+        maxHeight: "calc(100vh - 64px)",
+        overflow: "hidden",
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          width: { xs: "100%", md: "30%" },
+          borderRight: { md: "1px solid #333" },
+          pr: { md: 2 },
+          maxHeight: "100%",
+          overflowY: "auto",
+          mb: { xs: 2, md: 0 },
+        }}
+      >
+        <Button
+          onClick={startNewConversation}
+          sx={{
+            mb: 2,
+            bgcolor: teal[700],
+            color: "white",
+            borderRadius: 2,
+            ":hover": { bgcolor: teal[600] },
+          }}
+        >
           New Conversation
         </Button>
         {loadingConversations ? (
@@ -226,15 +256,24 @@ const Chat = () => {
                 noWrap
                 sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
               >
-                {summary.lastMessage ? summary.lastMessage.content : "Empty conversation"}
+                {summary.lastMessage
+                  ? summary.lastMessage.content
+                  : "Empty conversation"}
               </Typography>
             </Box>
           ))
         )}
       </Box>
 
-      {/* Chat Area */}
-      <Box sx={{ display: "flex", flex: { md: 0.7, xs: 1 }, flexDirection: "column", px: 3, width: "100%" }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          px: { xs: 1, sm: 3 },
+          width: "100%",
+        }}
+      >
         <Typography
           sx={{
             textAlign: "center",
@@ -255,7 +294,7 @@ const Chat = () => {
           ref={chatContainerRef}
           sx={{
             width: "100%",
-            height: "60vh",
+            height: { xs: "50vh", sm: "60vh" },
             borderRadius: 3,
             mx: "auto",
             display: "flex",
@@ -266,10 +305,19 @@ const Chat = () => {
             p: 1,
           }}
         >
-          {currentConversation && currentConversation.messages && currentConversation.messages.length > 0 ? (
+          {currentConversation?.messages?.length > 0 ? (
             renderChatItems()
           ) : (
-            <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", opacity: 0.7 }}>
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                opacity: 0.7,
+              }}
+            >
               <Typography color="white" variant="h6" sx={{ textAlign: "center" }}>
                 Start a conversation
               </Typography>
@@ -289,7 +337,7 @@ const Chat = () => {
           )}
         </Box>
 
-        <Box sx={{ display: "flex", alignItems: "center", mt: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", mt: 2, gap: 1, flexWrap: "wrap" }}>
           <IconButton onClick={toggleSpeechRecognition} color={isListening ? "secondary" : "primary"}>
             <MdMic size={28} />
           </IconButton>
@@ -305,10 +353,18 @@ const Chat = () => {
               p: 1.5,
               fontSize: "16px",
               flex: 1,
+              minWidth: "0",
             }}
             placeholder="Type a message"
           />
-          <IconButton onClick={() => speakResponse(currentConversation?.messages?.[currentConversation.messages.length - 1]?.content)} color="primary">
+          <IconButton
+            onClick={() =>
+              speakResponse(
+                currentConversation?.messages?.[currentConversation.messages.length - 1]?.content
+              )
+            }
+            color="primary"
+          >
             <MdSend size={28} />
           </IconButton>
         </Box>

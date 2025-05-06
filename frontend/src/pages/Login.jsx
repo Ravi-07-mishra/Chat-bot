@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 const Login = () => {
   const auth = useAuth();
   const navigate = useNavigate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -20,7 +21,6 @@ const Login = () => {
       await auth?.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
       navigate('/chat');
-      
     } catch (error) {
       toast.error("Signing failed", { id: "login" });
       console.error("Login error:", error);
@@ -28,12 +28,53 @@ const Login = () => {
   };
 
   return (
-    <Box width="100%" height="100%" display="flex" flex="1">
-      <Box padding="8" mt={8} display={{ md: "flex", sm: "none", xs: "none" }}>
-        <img src="airobot.png" alt="Robot" style={{ width: "400px" }} />
+    <Box
+      width="100%"
+      minHeight="100vh"
+      display="flex"
+      flexDirection={{ xs: "column", md: "row" }}
+      alignItems="center"
+      justifyContent="center"
+      p={2}
+      sx={{ backgroundColor: "#0a0a0a" }}
+    >
+      {/* Image Box (hidden on small screens) */}
+      <Box
+        display={{ xs: "none", sm: "none", md: "flex" }}
+        justifyContent="center"
+        alignItems="center"
+        p={4}
+        maxWidth="100%"
+      >
+        <img
+          src="airobot.png"
+          alt="Robot"
+          style={{ width: "100%", maxWidth: "400px", height: "auto" }}
+        />
       </Box>
-      <Box display="flex" flex={{ xs: 1, md: 0.5 }} justifyContent="center" alignItems="center" padding={2} ml="auto" mt={16}>
-        <form style={{ margin: "auto", padding: "30px", boxShadow: "10px 10px 20px #000", borderRadius: "10px", border: "none" }} onSubmit={handleSubmit}>
+
+      {/* Form Box */}
+      <Box
+        display="flex"
+        flex={1}
+        justifyContent="center"
+        alignItems="center"
+        mt={{ xs: 4, md: 8 }}
+        width="100%"
+      >
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            width: "100%",
+            maxWidth: "400px",
+            margin: "auto",
+            padding: "30px",
+            boxShadow: "10px 10px 20px #000",
+            borderRadius: "10px",
+            border: "none",
+            backgroundColor: "#121212",
+          }}
+        >
           <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <Typography variant="h4" textAlign="center" padding={2} fontWeight={600}>
               Login
@@ -43,11 +84,11 @@ const Login = () => {
             <CustomizedInput type="password" name="password" label="Password" />
             <Button
               type="submit"
+              fullWidth
               sx={{
                 px: 2,
                 py: 1,
                 mt: 2,
-                width: "400px",
                 borderRadius: 2,
                 bgcolor: "#00fffc",
                 ":hover": { bgcolor: "white", color: "black" },

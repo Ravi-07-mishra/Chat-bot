@@ -2,7 +2,6 @@ import { Box, Button, Typography } from "@mui/material";
 import React from "react";
 import CustomizedInput from "../components/shared/CustomizedInput";
 import { RiLoginCircleFill } from "react-icons/ri";
-import axios from "axios";
 import { useAuth } from "../assets/context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -20,9 +19,9 @@ const Signup = () => {
 
     try {
       toast.loading("Signing up...", { id: "signup" });
-      await auth?.signup(name, email, password); // Pass name if needed
+      await auth?.signup(name, email, password);
       toast.success("Signed up successfully!", { id: "signup" });
-      navigate("/dashboard"); // Redirect after successful signup
+      navigate("/dashboard");
     } catch (error) {
       toast.error("Signup failed. Please try again.", { id: "signup" });
       console.error(error);
@@ -30,24 +29,37 @@ const Signup = () => {
   };
 
   return (
-    <Box width="100%" height="100%" display="flex" flex="1">
+    <Box
+      width="100%"
+      minHeight="100vh"
+      display="flex"
+      flexDirection={{ xs: "column", md: "row" }}
+      alignItems="center"
+      justifyContent="center"
+      p={2}
+      sx={{ backgroundColor: "#0a0a0a" }}
+    >
+      {/* Image Section - hidden on small screens */}
       <Box
-        padding={8}
-        mt={8}
-        display={{ md: "flex", sm: "none", xs: "none" }}
-      >
-        <img src="airobot.png" alt="Robot" style={{ width: "400px" }} />
-      </Box>
-      <Box
-        display="flex"
-        flex={{ xs: 1, md: 0.5 }}
+        display={{ xs: "none", sm: "none", md: "flex" }}
         justifyContent="center"
         alignItems="center"
-        padding={2}
-        ml="auto"
-        mt={16}
+        p={4}
+      >
+        <img src="airobot.png" alt="Robot" style={{ width: "100%", maxWidth: "400px", height: "auto" }} />
+      </Box>
+
+      {/* Form Section */}
+      <Box
+        display="flex"
+        flex={1}
+        justifyContent="center"
+        alignItems="center"
+        mt={{ xs: 4, md: 8 }}
+        width="100%"
       >
         <form
+          onSubmit={handleSubmit}
           style={{
             margin: "auto",
             padding: "30px",
@@ -56,8 +68,8 @@ const Signup = () => {
             border: "none",
             maxWidth: "400px",
             width: "100%",
+            backgroundColor: "#121212",
           }}
-          onSubmit={handleSubmit}
         >
           <Box
             sx={{

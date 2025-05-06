@@ -1,4 +1,3 @@
-// src/components/LanguageSwitcher.js
 import { Menu } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
@@ -13,13 +12,13 @@ const LanguageSwitcher = () => {
   const { i18n } = useTranslation();
 
   return (
-    <div className="relative inline-block text-left">
-      <Menu as="div" className="relative">
-        <Menu.Button className="inline-flex justify-center w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium hover:bg-gray-100 transition">
+    <div className="relative inline-block text-left w-full max-w-[200px]">
+      <Menu as="div" className="relative w-full">
+        <Menu.Button className="inline-flex justify-between w-full rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-sm font-medium hover:bg-gray-100 transition">
           🌐 {languages.find(l => l.code === i18n.language)?.label}
           <ChevronDown className="ml-2 h-4 w-4" />
         </Menu.Button>
-        <Menu.Items className="absolute z-10 mt-2 w-48 origin-top-right bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg focus:outline-none">
+        <Menu.Items className="absolute z-10 mt-2 w-full origin-top-right bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg focus:outline-none">
           {languages.map((lang) => (
             <Menu.Item key={lang.code}>
               {({ active }) => (
