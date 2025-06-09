@@ -25,7 +25,7 @@ export const listModels = async () => {
 
 export const signupUser = async (name, email, password) => {
   try {
-    const res = await axios.post('/user/signup', { name, email, password });
+    const res = await axios.post('/api/v1/user/signup', { name, email, password });
     if (![200, 201].includes(res.status)) throw new Error('Signup failed');
     return res.data;
   } catch (error) {
@@ -36,7 +36,7 @@ export const signupUser = async (name, email, password) => {
 
 export const loginUser = async (email, password) => {
   try {
-    const res = await axios.post('/user/login', { email, password });
+    const res = await axios.post('/api/v1/user/login', { email, password });
     if (![200, 201].includes(res.status)) throw new Error('Login failed');
     return res.data;
   } catch (error) {
@@ -47,7 +47,7 @@ export const loginUser = async (email, password) => {
 
 export const checkAuthStatus = async () => {
   try {
-    const res = await axios.get('/user/auth-status');
+    const res = await axios.get('/api/v1/user/auth-status');
     if (res.status !== 200) throw new Error('Auth status check failed');
     return res.data;
   } catch (error) {
