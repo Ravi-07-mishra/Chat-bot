@@ -1,22 +1,30 @@
 import React from 'react';
-import { TextField, useMediaQuery } from '@mui/material';
+import { TextField, useTheme, useMediaQuery } from '@mui/material';
 
-const CustomizedInput = ({ name, type, label }) => {
-  const isSmallScreen = useMediaQuery('(max-width:600px)');
+const CustomizedInput = ({ name, type, label, fullWidth = true }) => {
+  const theme = useTheme();
+  const isXs = useMediaQuery(theme.breakpoints.down('xs'));
 
   return (
     <TextField
       name={name}
-      label={label}
       type={type}
-      fullWidth
-      InputLabelProps={{ style: { color: 'white' } }}
+      label={label}
+      fullWidth={fullWidth}
+      variant="filled"
+      InputLabelProps={{ sx: { color: 'rgba(255,255,255,0.7)' } }}
       inputProps={{
-        style: {
-          width: isSmallScreen ? '100%' : '400px',
-          borderRadius: 10,
-          fontSize: 20,
+        sx: {
           color: 'white',
+          fontSize: isXs ? '0.875rem' : '1rem',
+          borderRadius: 1,
+        },
+      }}
+      sx={{
+        my: 1,
+        '& .MuiFilledInput-root': {
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          '&:hover': { backgroundColor: 'rgba(255,255,255,0.15)' },
         },
       }}
     />

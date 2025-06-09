@@ -1,82 +1,25 @@
-import { AppBar, Toolbar, Box } from '@mui/material';
 import React from 'react';
+import { AppBar, Toolbar, Box, useTheme, useMediaQuery } from '@mui/material';
 import Logo from './shared/Logo';
 import { useAuth } from '../assets/context/AuthContext';
 import NavigationLink from './shared/NavigationLink';
 
 const Header = () => {
   const auth = useAuth();
+  const theme = useTheme();
+  const isSmUp = useMediaQuery(theme.breakpoints.up('sm'));
+
   return (
-    <AppBar
-      sx={{
-        bgcolor: "transparent",
-        position: "static",
-        boxShadow: "none",
-      }}
-    >
-      <Toolbar
-        sx={{
-          display: "flex",
-          flexDirection: { xs: "column", sm: "row" },
-          justifyContent: "space-between",
-          alignItems: { xs: "flex-start", sm: "center" },
-          gap: { xs: 1, sm: 0 },
-        }}
-      >
+    <AppBar position="static" elevation={0} sx={{ bgcolor: 'transparent' }}>
+      <Toolbar sx={{ flexDirection: isSmUp ? 'row' : 'column', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
         <Logo />
-        <Box
-          sx={{
-            display: "flex",
-            gap: "10px",
-            flexWrap: "wrap",
-            justifyContent: { xs: "flex-start", sm: "flex-end" },
-            width: { xs: "100%", sm: "auto" },
-            mt: { xs: 1, sm: 0 },
-          }}
-        >
-          {auth?.isLoggedIn ? (
-            <>
-            
-              <button
-                style={{
-                  backgroundColor: "#51538f",
-                  color: "#fff",
-                  border: "none",
-                  padding: "10px 20px",
-                  cursor: "pointer",
-                  borderRadius: "8px",
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  transition: "background-color 0.3s ease, transform 0.2s ease",
-                  boxShadow: "0 4px 8px rgba(0, 0, 0, 0.2)",
-                }}
-                onClick={auth.logout}
-                onMouseEnter={(e) => {
-                  e.target.style.backgroundColor = "#42436c";
-                  e.target.style.transform = "scale(1.02)";
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.backgroundColor = "#51538f";
-                  e.target.style.transform = "scale(1)";
-                }}
-              >
-                Logout
-              </button>
-            </>
+        <Box sx={{ display: 'flex', gap: 1, mt: isSmUp ? 0 : 2 }}>
+          {auth.isLoggedIn ? (
+            <NavigationLink to="/" text="Logout" onClick={auth.logout} bg="#51538f" textColor="#fff" />
           ) : (
             <>
-              <NavigationLink
-                bg="#00fffc"
-                to="/login"
-                text="Login"
-                textColor="black"
-              />
-              <NavigationLink
-                bg="#51538f"
-                to="/signup"
-                text="Signup"
-                textColor="white"
-              />
+              <NavigationLink to="/login" text="Login" bg="#00fffc" textColor="#000" />
+              <NavigationLink to="/signup" text="Signup" bg="#51538f" textColor="#fff" />
             </>
           )}
         </Box>

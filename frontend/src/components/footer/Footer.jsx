@@ -1,32 +1,37 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React from 'react';
+import { Box, Typography, Link as MuiLink, useTheme, useMediaQuery } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 
 const Footer = () => {
+  const theme = useTheme();
+  const isSmUp = useMediaQuery(theme.breakpoints.up('sm'));
+
   return (
-    <footer>
-      <div
-        style={{
-          width: "100%",
-          minHeight: "20vh",
-          maxHeight: "30vh",
-          marginTop: 60,
-        }}
-      >
-        <p style={{ fontSize: "30px", textAlign: "center", padding: "20px" }}>
-          Built With determination 
-          <span>
-            <Link
-              style={{ color: "white" }}
-              className="nav-link"
-              to={"https://youtube.com/indiancoders"}
-            >
-           Ravi Mishra
-            </Link>
-          </span>
-          💘
-        </p>
-      </div>
-    </footer>
+    <Box
+      component="footer"
+      sx={{
+        width: '100%',
+        py: 4,
+        mt: 8,
+        backgroundColor: 'transparent',
+        textAlign: 'center',
+      }}
+    >
+      <Typography variant={isSmUp ? 'h6' : 'body1'}>
+        Built with determination by{' '}
+        <MuiLink
+          component={RouterLink}
+          to="https://youtube.com/indiancoders"
+          target="_blank"
+          rel="noopener"
+          underline="hover"
+          sx={{ fontWeight: 600 }}
+        >
+          Ravi Mishra
+        </MuiLink>{' '}
+        ❤️
+      </Typography>
+    </Box>
   );
 };
 
