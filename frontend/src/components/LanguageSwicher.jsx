@@ -1,33 +1,45 @@
-import React from 'react';
-import { Menu, MenuButton, MenuList, MenuItem } from '@reach/menu-button';
-import '@reach/menu-button/styles.css';
-import { useTranslation } from 'react-i18next';
-import { useTheme, useMediaQuery, Button } from '@mui/material';
+// LanguageSwitcher.jsx
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Button } from '@mui/material';
+import { KeyboardArrowDown } from '@mui/icons-material';
 
-const languages = [
-  { code: 'en', label: 'English 🇺🇸' },
-  { code: 'es', label: 'Español 🇪🇸' },
-  { code: 'hi', label: 'हिन्दी 🇮🇳' },
-];
-
-const LanguageSwitcher = () => {
-  const { i18n } = useTranslation();
-  const theme = useTheme();
-  const isSmUp = useMediaQuery(theme.breakpoints.up('sm'));
+const LanguageSwitcher = ({ currentLang, setLang }) => {
+  const languages = ['English', 'Hindi', 'Tamil'];
 
   return (
-    <Menu>
-      <MenuButton as={Button} variant="outlined" sx={{ textTransform: 'none', minWidth: isSmUp ? 120 : 80 }}>
-        🌐 {languages.find(l => l.code === i18n.language)?.label}
-      </MenuButton>
-      <MenuList>
-        {languages.map(({ code, label }) => (
-          <MenuItem key={code} onSelect={() => i18n.changeLanguage(code)}>
-            {label}
-          </MenuItem>
-        ))}
-      </MenuList>
-    </Menu>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button endIcon={<KeyboardArrowDown />} variant="outlined">
+          {currentLang}
+        </Button>
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          sideOffset={5}
+          style={{
+            backgroundColor: 'white',
+            padding: '0.5rem',
+            borderRadius: '0.5rem',
+            boxShadow: '0 0 10px rgba(0,0,0,0.15)',
+          }}
+        >
+          {languages.map((lang) => (
+            <DropdownMenu.Item
+              key={lang}
+              onSelect={() => setLang(lang)}
+              style={{
+                padding: '0.5rem 1rem',
+                cursor: 'pointer',
+                fontWeight: lang === currentLang ? 'bold' : 'normal',
+              }}
+            >
+              {lang}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 };
 
