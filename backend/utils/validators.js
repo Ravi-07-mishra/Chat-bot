@@ -12,16 +12,18 @@ const validate = (validations) => {
       console.log("Validation Error:", errors.array()); // Add this line
       return res.status(422).json({ errors: errors.array() });
     }
-    
+
     // Proceed to the next middleware if no errors
     next();
   };
 };
 const LoginValidator = [
-  
-    body("email").trim().isEmail().withMessage("Invalid email format"),
-    body("password").trim().isLength({ min: 6 }).withMessage("Should contain at least 6 characters"),
-  ];
+  body("email").trim().isEmail().withMessage("Invalid email format"),
+  body("password")
+    .trim()
+    .isLength({ min: 6 })
+    .withMessage("Should contain at least 6 characters"),
+];
 // Signup validator
 const signupValidator = [
   body("name").notEmpty().withMessage("Name is required"),
@@ -29,7 +31,15 @@ const signupValidator = [
 ];
 const chatCompletionValidator = [
   body("message").notEmpty().withMessage("Message is required"),
- 
+];
+const streamChatValidator = [
+  body("message").notEmpty().withMessage("Message is required"),
 ];
 
-module.exports = {validate,signupValidator,LoginValidator,chatCompletionValidator}
+module.exports = {
+  validate,
+  streamChatValidator,
+  signupValidator,
+  LoginValidator,
+  chatCompletionValidator,
+};

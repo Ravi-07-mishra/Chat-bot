@@ -1,26 +1,50 @@
 // routes/chatRoutes.js
 const express = require("express");
 const { verifyToken } = require("../utils/token-manager");
-const { validate, chatCompletionValidator } = require("../utils/validators");
-const { generateChatCompletion, getConversationsSummary, getConversationById } = require("../controllers/chat");
+const { validate, chatCompletionValidator, streamChatValidator } = require("../utils/validators");
+const {
+  generateChatCompletion,
+  streamChat,
+  getConversationsSummary,
+  getConversationById,
+  handleUpload,         // NEW: your controller for file/image upload
+  getSuggestions       // NEW: your controller for smart suggestions
+} = require("../controllers/chat");
+
 const chatRoutes = express.Router();
 
-// POST endpoint: Create or update a conversation by sending a new message
-chatRoutes.post("/new", validate(chatCompletionValidator), verifyToken, (req, res, next) => {
-  console.log("POST /new endpoint called");
-  next();
-}, generateChatCompletion);
+// Classic chat (non-streaming)
+chatRoutes.post(
+  "/new",
+  validate(chatCompletionValidator),
+  verifyToken,
+  generateChatCompletion
+);
 
-// GET endpoint: Retrieve conversation summaries (for sidebar)
-chatRoutes.get("/conversations", verifyToken, (req, res, next) => {
-  console.log("GET /conversations endpoint called");
-  next();
-}, getConversationsSummary);
+// SSE streaming
+chatRoutes.post(
+  "/stream",
+  validate(streamChatValidator),
+  verifyToken,
+  streamChat
+);
 
-// GET endpoint: Retrieve full conversation by ID
-chatRoutes.get("/conversations/:conversationId", verifyToken, (req, res, next) => {
-  console.log("GET /conversations/:conversationId endpoint called");
-  next();
-}, getConversationById);
+// File / Image upload & processing
+chatRoutes.post(
+  "/upload",
+  verifyToken,
+  handleUpload
+);
+
+// Smart suggestions / autocomplete
+chatRoutes.post(
+  "/suggest",
+  verifyToken,
+  getSuggestions
+);
+
+// Sidebar listings
+chatRoutes.get("/conversations", verifyToken, getConversationsSummary);
+chatRoutes.get("/conversations/:conversationId", verifyToken, getConversationById);
 
 module.exports = chatRoutes;

@@ -7,58 +7,46 @@ import {
   IconButton,
   Typography,
   CircularProgress,
+  MenuItem,
+  TextField,
 } from "@mui/material";
 import { useRef, useState, useEffect } from "react";
 import { useAuth } from "../assets/context/AuthContext";
 import { red, teal } from "@mui/material/colors";
-import { MdSend, MdMic } from "react-icons/md";
+import { MdSend, MdMic, MdUploadFile } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 
-const fetchAPI = async (url, options = {}) => {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || "API call failed");
-  }
-  return data;
-};
+import {
+  getConversations,
+  getConversationById,
+  sendChatMessage,
+  streamChat,
+  uploadFile,
+  getSuggestions,
+} from "../helpers/api-communicator";
 
 const Chat = () => {
   const auth = useAuth();
   const navigate = useNavigate();
-  const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const chatContainerRef = useRef(null);
-  const [currentConversation, setCurrentConversation] = useState(null);
+
+  const [currentConversation, setCurrentConversation] = useState({
+    conversationId: null,
+    messages: [],
+  });
   const [conversationSummaries, setConversationSummaries] = useState([]);
+  const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
 
   useEffect(() => {
-    if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
-      const SpeechRecognitionAPI =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognitionAPI();
-      recognition.lang = "en-US";
-      recognition.interimResults = true;
-      recognition.onresult = handleSpeechResult;
-      recognition.onerror = handleSpeechError;
-      setSpeechRecognition(recognition);
-    } else {
-      console.warn("Speech Recognition API not supported in this browser.");
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!auth?.isLoggedIn) {
-      navigate("/login");
-    }
+    if (!auth?.isLoggedIn) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
   useEffect(() => {
@@ -66,32 +54,28 @@ const Chat = () => {
       chatContainerRef.current.scrollTop =
         chatContainerRef.current.scrollHeight;
     }
-  }, [currentConversation]);
+  }, [currentConversation.messages, loading]);
 
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
     try {
-      const data = await fetchAPI("/api/v1/chat/conversations");
-      setConversationSummaries(data.conversations);
+      const convs = await getConversations();
+      setConversationSummaries(convs);
     } catch (err) {
-      console.error("Error loading conversation summaries:", err);
       setError(err.message);
     } finally {
       setLoadingConversations(false);
     }
   };
 
-  const loadConversation = async (conversationId) => {
+  const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAPI(
-        `/api/v1/chat/conversations/${conversationId}`
-      );
-      setCurrentConversation(data.conversation);
+      const convo = await getConversationById(id);
+      setCurrentConversation(convo);
     } catch (err) {
-      console.error("Error loading conversation:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -99,67 +83,136 @@ const Chat = () => {
   };
 
   const handleSubmit = async () => {
-    const content = inputRef.current?.value?.trim();
-    if (!content) return;
-    inputRef.current.value = "";
+    const text = inputText.trim();
+    if (!text) return;
+    setInputText("");
     setLoading(true);
     setError(null);
     try {
-      const payload = { message: content };
-      if (currentConversation?.conversationId) {
-        payload.conversationId = currentConversation.conversationId;
-      }
-      const data = await fetchAPI("/api/v1/chat/new", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      setCurrentConversation(data.conversation);
-      loadConversationSummaries();
+      const convo = await sendChatMessage(
+        text,
+        currentConversation.conversationId
+      );
+      setCurrentConversation(convo);
+      await loadConversationSummaries();
     } catch (err) {
-      console.error("Error handling chat submission:", err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !loading) {
-      e.preventDefault();
-      handleSubmit();
+  const handleStream = () => {
+    const text = inputText.trim();
+    if (!text) return;
+    setInputText("");
+    setLoading(true);
+
+    let buffer = "";
+    streamChat({
+      message: text,
+      conversationId: currentConversation.conversationId,
+      onChunk: (part) => {
+        buffer += part;
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: [
+            ...c.messages.filter((m) => m.role !== "assistant-stream"),
+            { role: "assistant-stream", content: buffer },
+          ],
+        }));
+      },
+      onDone: (full) => {
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: [
+            ...c.messages.filter((m) => m.role !== "assistant-stream"),
+            { role: "assistant", content: full },
+          ],
+        }));
+        loadConversationSummaries();
+        setLoading(false);
+      },
+      onError: (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    });
+  };
+
+  const handleFileUpload = () => {
+    const file = fileInputRef.current.files[0];
+    if (!file) return;
+    setLoading(true);
+
+    let buffer = "";
+    uploadFile({
+      file,
+      text: inputText.trim(),
+      conversationId: currentConversation.conversationId,
+      onChunk: (part) => {
+        buffer += part;
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: [
+            ...c.messages.filter((m) => m.role !== "assistant-stream"),
+            { role: "assistant-stream", content: buffer },
+          ],
+        }));
+      },
+      onDone: (full) => {
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: [
+            ...c.messages.filter((m) => m.role !== "assistant-stream"),
+            { role: "assistant", content: full },
+          ],
+        }));
+        loadConversationSummaries();
+        setLoading(false);
+      },
+      onError: (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    });
+  };
+
+  const handleInputChange = async (e) => {
+    const txt = e.target.value;
+    setInputText(txt);
+    if (!txt) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const sug = await getSuggestions(txt);
+      setSuggestions(sug);
+    } catch {
+      setSuggestions([]);
     }
   };
 
-  const startNewConversation = () => {
-    setCurrentConversation({ conversationId: null, messages: [] });
-  };
-
-  const renderChatItems = () => {
-    if (!currentConversation?.messages) return null;
-    return currentConversation.messages.map((msg, i) => (
-      <Chatitem key={msg.id || i} content={msg.content} role={msg.role} />
-    ));
-  };
-
-  const speakResponse = (text) => {
-    const speech = new SpeechSynthesisUtterance(text);
-    speech.lang = "en-US";
-    window.speechSynthesis.speak(speech);
-  };
-
-  const handleSpeechResult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    if (event.results[0].isFinal) {
-      inputRef.current.value = transcript;
-      handleSubmit();
+  useEffect(() => {
+    const SpeechAPI =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechAPI) {
+      const recog = new SpeechAPI();
+      recog.lang = "en-US";
+      recog.interimResults = true;
+      recog.onresult = (ev) => {
+        const t = ev.results[0][0].transcript;
+        if (ev.results[0].isFinal) {
+          setInputText(t);
+          handleSubmit();
+        }
+      };
+      setSpeechRecognition(recog);
     }
-  };
+  }, []);
 
-  const handleSpeechError = (event) => {
-    console.error("Speech recognition error", event);
-  };
-
-  const toggleSpeechRecognition = () => {
+  const toggleSpeech = () => {
+    if (!speechRecognition) return;
     if (isListening) {
       speechRecognition.stop();
       setIsListening(false);
@@ -167,6 +220,11 @@ const Chat = () => {
       speechRecognition.start();
       setIsListening(true);
     }
+  };
+
+  const startNew = () => {
+    setCurrentConversation({ conversationId: null, messages: [] });
+    setError(null);
   };
 
   useEffect(() => {
@@ -189,6 +247,7 @@ const Chat = () => {
         overflow: "hidden",
       }}
     >
+      {/* Sidebar */}
       <Box
         sx={{
           display: "flex",
@@ -202,7 +261,7 @@ const Chat = () => {
         }}
       >
         <Button
-          onClick={startNewConversation}
+          onClick={startNew}
           sx={{
             mb: 2,
             bgcolor: teal[700],
@@ -213,15 +272,16 @@ const Chat = () => {
         >
           New Conversation
         </Button>
+
         {loadingConversations ? (
           <CircularProgress size={24} sx={{ color: "white" }} />
         ) : conversationSummaries.length === 0 ? (
           <Typography color="white">No conversations found</Typography>
         ) : (
-          conversationSummaries.map((summary) => (
+          conversationSummaries.map((s) => (
             <Box
-              key={summary.conversationId}
-              onClick={() => loadConversation(summary.conversationId)}
+              key={s.conversationId}
+              onClick={() => loadConversation(s.conversationId)}
               sx={{
                 display: "flex",
                 alignItems: "center",
@@ -248,7 +308,7 @@ const Chat = () => {
                   fontWeight: 600,
                 }}
               >
-                {summary.lastMessage?.content?.charAt(0)?.toUpperCase() || "?"}
+                {(s.lastMessage?.content || "?")[0].toUpperCase()}
               </Avatar>
               <Typography
                 variant="body1"
@@ -256,15 +316,14 @@ const Chat = () => {
                 noWrap
                 sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
               >
-                {summary.lastMessage
-                  ? summary.lastMessage.content
-                  : "Empty conversation"}
+                {s.lastMessage?.content || "Empty conversation"}
               </Typography>
             </Box>
           ))
         )}
       </Box>
 
+      {/* Main Chat Panel */}
       <Box
         sx={{
           display: "flex",
@@ -305,67 +364,99 @@ const Chat = () => {
             p: 1,
           }}
         >
-          {currentConversation?.messages?.length > 0 ? (
-            renderChatItems()
-          ) : (
+          {error && (
+            <Typography color="error" sx={{ p: 1 }}>
+              {error}
+            </Typography>
+          )}
+
+          {currentConversation.messages.map((msg, i) => (
+            <Chatitem key={i} content={msg.content} role={msg.role} />
+          ))}
+
+          {loading && (
             <Box
               sx={{
                 display: "flex",
-                flexDirection: "column",
+                p: 2,
+                bgcolor: "#004d56",
+                gap: 2,
                 alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                opacity: 0.7,
               }}
             >
-              <Typography color="white" variant="h6" sx={{ textAlign: "center" }}>
-                Start a conversation
-              </Typography>
-              <Typography color="gray" variant="body2" sx={{ textAlign: "center", mt: 1 }}>
-                Type a message below to begin
-              </Typography>
-            </Box>
-          )}
-
-          {loading && (
-            <Box sx={{ display: "flex", p: 2, bgcolor: "#004d56", gap: 2, alignItems: "center" }}>
               <Avatar>
-                <img src="openai.png" alt="gemini" width="30px" />
+                <img src="/openai.png" alt="gemini" width="30px" />
               </Avatar>
               <CircularProgress size={20} sx={{ color: "white" }} />
             </Box>
           )}
         </Box>
 
-        <Box sx={{ display: "flex", alignItems: "center", mt: 2, gap: 1, flexWrap: "wrap" }}>
-          <IconButton onClick={toggleSpeechRecognition} color={isListening ? "secondary" : "primary"}>
-            <MdMic size={28} />
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            mt: 2,
+            gap: 1,
+            flexWrap: "wrap",
+          }}
+        >
+          <IconButton onClick={toggleSpeech}>
+            <MdMic size={28} color={isListening ? red[500] : teal[300]} />
           </IconButton>
-          <Box
-            component="input"
-            ref={inputRef}
-            onKeyPress={handleKeyPress}
-            sx={{
-              background: "rgba(255, 255, 255, 0.1)",
-              color: "white",
-              border: "none",
-              borderRadius: 3,
-              p: 1.5,
-              fontSize: "16px",
-              flex: 1,
-              minWidth: "0",
+
+          <TextField
+            variant="filled"
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !loading) {
+                e.preventDefault();
+                handleSubmit();
+              }
             }}
             placeholder="Type a message"
-          />
-          <IconButton
-            onClick={() =>
-              speakResponse(
-                currentConversation?.messages?.[currentConversation.messages.length - 1]?.content
-              )
-            }
-            color="primary"
+            fullWidth
+            InputProps={{
+              disableUnderline: true,
+            }}
+            sx={{
+              background: "rgba(255,255,255,0.1)",
+              color: "white",
+              borderRadius: 3,
+            }}
+            select={suggestions.length > 0}
+            SelectProps={{
+              MenuProps: { PaperProps: { sx: { mt: -1 } } },
+            }}
           >
-            <MdSend size={28} />
+            {suggestions.map((s, idx) => (
+              <MenuItem
+                key={idx}
+                value={s}
+                onClick={() => {
+                  setInputText(s);
+                  setSuggestions([]);
+                }}
+              >
+                {s}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <IconButton onClick={() => fileInputRef.current.click()}>
+            <MdUploadFile size={28} color={teal[300]} />
+            <input
+              type="file"
+              accept="image/*,text/plain"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileUpload}
+            />
+          </IconButton>
+
+          <IconButton onClick={handleStream} disabled={loading}>
+            <MdSend size={28} color={teal[300]} />
           </IconButton>
         </Box>
       </Box>
