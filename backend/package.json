@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js"
+  "start": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +25,10 @@
     "mongoose": "^8.9.3",
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
-    "nodemon": "^3.1.9",
     "openai": "^4.77.3",
     "undici": "^6.21.2"
+  },
+  "devDependencies": {
+  
   }
 }
