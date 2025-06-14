@@ -2,98 +2,149 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const { createToken } = require("../utils/token-manager");
 
+// GET all users (admin/debug only — exclude passwords)
 const getAllusers = async (req, res) => {
   try {
-    const users = await User.find({});
+    const users = await User.find({}, "-password");
     return res.status(200).json({ message: "OK", users });
   } catch (error) {
-    return res.status(500).json({ message: "ERROR", cause: error.message });
+    console.error("Error fetching users:", error);
+    return res.status(500).json({ message: "Internal server error", cause: error.message });
   }
 };
 
+// POST /signup
 const userSignup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
-    const existinguser = await User.findOne({ email });
-    if (existinguser) {
-      return res.status(401).send("User already registered");
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already registered" });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, salt);
-    const user = new User({ name, email, password: hash });
+    // Hash password
+    const salt = await bcrypt.genSalt(12); // More secure than 10
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create and save user
+    const user = new User({ name, email, password: hashedPassword });
     await user.save();
 
+    // Create JWT token
     const token = createToken(user._id.toString(), user.email, "7d");
 
+    // Set secure cookie
+    res.cookie("auth_token", token, {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     return res.status(201).json({
-      message: "User created",
-      name: user.name,
-      email: user.email,
-      token, // ✅ Include token
+      message: "User created successfully",
+      user: {
+        name: user.name,
+        email: user.email,
+      },
     });
   } catch (error) {
-    return res.status(500).json({ message: "ERROR", cause: error.message });
+    console.error("Signup error:", error);
+    return res.status(500).json({ message: "Signup failed", cause: error.message });
   }
 };
 
+// POST /login
 const userLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).send("User not registered");
+      return res.status(401).json({ message: "User not registered" });
     }
 
-    const isCorrect = await bcrypt.compare(password, user.password);
-    if (!isCorrect) {
-      return res.status(403).send("Incorrect Password");
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(403).json({ message: "Incorrect password" });
     }
 
+    // Create JWT token
     const token = createToken(user._id.toString(), user.email, "7d");
 
+    // Set secure cookie
+    res.cookie("auth_token", token, {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     return res.status(200).json({
-      message: "Successful login",
-      name: user.name,
-      email: user.email,
-      token, // ✅ Include token
+      message: "Login successful",
+      user: {
+        name: user.name,
+        email: user.email,
+      },
     });
   } catch (error) {
-    return res.status(500).json({ message: "ERROR", cause: error.message });
+    console.error("Login error:", error);
+    return res.status(500).json({ message: "Login failed", cause: error.message });
   }
 };
 
+// GET /auth-status (Verify Token)
 const verifyUser = async (req, res) => {
   try {
-    const user = await User.findById(res.locals.jwtData.id);
-    if (!user) {
-      return res.status(401).send("User not registered or token is wrong");
+    const userId = res.locals.jwtData?.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized - no token data" });
     }
 
-    if (user._id.toString() !== res.locals.jwtData.id) {
-      return res.status(401).send("Permissions didn't match");
+    const user = await User.findById(userId, "-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
     return res.status(200).json({
       message: "Authorized user",
-      name: user.name,
-      email: user.email,
+      user: {
+        name: user.name,
+        email: user.email,
+      },
     });
   } catch (error) {
-    return res.status(500).json({ message: "ERROR", cause: error.message });
+    console.error("Auth check failed:", error);
+    return res.status(500).json({ message: "Authorization failed", cause: error.message });
   }
 };
 
-const logoutuser = async (req, res) => {
+// POST /logout
+const logoutuser = (req, res) => {
   try {
+    res.clearCookie("auth_token", {
+      path: "/",
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    });
+
     return res.status(200).json({
       success: true,
       message: "Logged out successfully",
     });
   } catch (error) {
+    console.error("Logout error:", error);
     return res.status(500).json({
       success: false,
-      message: "Error logging out",
+      message: "Logout failed",
+      cause: error.message,
     });
   }
 };

@@ -1,19 +1,25 @@
 // routes/chatRoutes.js
+
 const express = require("express");
 const { verifyToken } = require("../utils/token-manager");
-const { validate, chatCompletionValidator, streamChatValidator } = require("../utils/validators");
+const {
+  validate,
+  chatCompletionValidator,
+  streamChatValidator,
+} = require("../utils/validators");
 const {
   generateChatCompletion,
   streamChat,
   getConversationsSummary,
   getConversationById,
-  handleUpload,         // NEW: your controller for file/image upload
-  getSuggestions       // NEW: your controller for smart suggestions
+  handleUpload,
+  getSuggestions,
+  deleteConversation,
 } = require("../controllers/chat");
 
 const chatRoutes = express.Router();
 
-// Classic chat (non-streaming)
+// Classic chat (non‑streaming)
 chatRoutes.post(
   "/new",
   validate(chatCompletionValidator),
@@ -29,7 +35,7 @@ chatRoutes.post(
   streamChat
 );
 
-// File / Image upload & processing
+// File / Image upload & processing (now JSON Base64, no multer)
 chatRoutes.post(
   "/upload",
   verifyToken,
@@ -37,14 +43,20 @@ chatRoutes.post(
 );
 
 // Smart suggestions / autocomplete
-chatRoutes.post(
-  "/suggest",
-  verifyToken,
-  getSuggestions
-);
+chatRoutes.post("/suggest", verifyToken, getSuggestions);
 
 // Sidebar listings
 chatRoutes.get("/conversations", verifyToken, getConversationsSummary);
-chatRoutes.get("/conversations/:conversationId", verifyToken, getConversationById);
+chatRoutes.get(
+  "/conversations/:conversationId",
+  verifyToken,
+  getConversationById
+);
+// Delete a conversation
+chatRoutes.delete(
+  "/conversations/:conversationId",
+  verifyToken,
+  deleteConversation
+);
 
 module.exports = chatRoutes;

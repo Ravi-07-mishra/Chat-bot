@@ -1,5 +1,7 @@
+// src/pages/Chat.jsx
 "use client";
 
+import React, { useRef, useState, useEffect } from "react";
 import {
   Avatar,
   Box,
@@ -7,15 +9,18 @@ import {
   IconButton,
   Typography,
   CircularProgress,
-  MenuItem,
-  TextField,
+  Drawer,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
-import { useRef, useState, useEffect } from "react";
-import { useAuth } from "../assets/context/AuthContext";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { red, teal } from "@mui/material/colors";
-import { MdSend, MdMic, MdUploadFile } from "react-icons/md";
+import { MdSend, MdMic, MdUploadFile, MdMenu } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
+import Autocomplete from "@mui/material/Autocomplete";
+import TextField from "@mui/material/TextField";
+import { useAuth } from "../assets/context/AuthContext";
 
 import {
   getConversations,
@@ -24,31 +29,39 @@ import {
   streamChat,
   uploadFile,
   getSuggestions,
+  deleteConversation,
 } from "../helpers/api-communicator";
 
-const Chat = () => {
+export default function Chat() {
+  const theme = useTheme();
+  const isMdUp = useMediaQuery(theme.breakpoints.up("md"));
   const auth = useAuth();
   const navigate = useNavigate();
+
   const fileInputRef = useRef(null);
   const chatContainerRef = useRef(null);
+  const debounceRef = useRef(null);
 
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [currentConversation, setCurrentConversation] = useState({
     conversationId: null,
     messages: [],
   });
   const [conversationSummaries, setConversationSummaries] = useState([]);
   const [inputText, setInputText] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
-  const [suggestions, setSuggestions] = useState([]);
 
+  // Redirect if not logged in
   useEffect(() => {
     if (!auth?.isLoggedIn) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
+  // Auto‑scroll on new messages or loading
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -56,6 +69,7 @@ const Chat = () => {
     }
   }, [currentConversation.messages, loading]);
 
+  // Load all conversation summaries
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -69,12 +83,14 @@ const Chat = () => {
     }
   };
 
+  // Load a specific conversation
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
     try {
       const convo = await getConversationById(id);
       setCurrentConversation(convo);
+      if (!isMdUp) setMobileOpen(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -82,12 +98,33 @@ const Chat = () => {
     }
   };
 
+  // Delete a conversation
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this chat?")) return;
+    setLoadingConversations(true);
+    setError(null);
+    try {
+      await deleteConversation(id);
+      if (currentConversation.conversationId === id) {
+        setCurrentConversation({ conversationId: null, messages: [] });
+      }
+      await loadConversationSummaries();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  // Send message (no optimistic UI)
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text) return;
+
     setInputText("");
     setLoading(true);
     setError(null);
+
     try {
       const convo = await sendChatMessage(
         text,
@@ -102,6 +139,7 @@ const Chat = () => {
     }
   };
 
+  // SSE streaming helper
   const handleStream = () => {
     const text = inputText.trim();
     if (!text) return;
@@ -140,6 +178,7 @@ const Chat = () => {
     });
   };
 
+  // File upload + streaming
   const handleFileUpload = () => {
     const file = fileInputRef.current.files[0];
     if (!file) return;
@@ -178,21 +217,26 @@ const Chat = () => {
     });
   };
 
-  const handleInputChange = async (e) => {
-    const txt = e.target.value;
-    setInputText(txt);
-    if (!txt) {
-      setSuggestions([]);
-      return;
-    }
-    try {
-      const sug = await getSuggestions(txt);
-      setSuggestions(sug);
-    } catch {
+  // Debounced suggestions fetch
+  const handleInputChange = (event, value, reason) => {
+    setInputText(value || "");
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (reason === "input" && value) {
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const sug = await getSuggestions(value);
+          setSuggestions(sug);
+        } catch {
+          setSuggestions([]);
+        }
+      }, 300);
+    } else if (!value) {
       setSuggestions([]);
     }
   };
 
+  // Web Speech API setup (empty deps to avoid loops)
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -209,6 +253,9 @@ const Chat = () => {
       };
       setSpeechRecognition(recog);
     }
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, []);
 
   const toggleSpeech = () => {
@@ -222,63 +269,55 @@ const Chat = () => {
     }
   };
 
+  // New conversation
   const startNew = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
+    if (!isMdUp) setMobileOpen(false);
   };
 
+  // Initial load
   useEffect(() => {
     loadConversationSummaries();
   }, []);
 
-  return (
+  // Sidebar content
+  const sidebarContent = (
     <Box
       sx={{
         display: "flex",
-        flexDirection: { xs: "column", md: "row" },
-        width: "100%",
-        height: "100%",
-        mt: 3,
-        gap: 3,
+        flexDirection: "column",
+        width: { xs: "100%", md: "30%" },
+        pr: { md: 2 },
+        p: { xs: 1.5, sm: 2 },
         backgroundColor: "rgb(7, 15, 25)",
         borderRadius: 2,
-        p: { xs: 1.5, sm: 2 },
-        maxHeight: "calc(100vh - 64px)",
-        overflow: "hidden",
+        height: "100%",
+        overflowY: "auto",
       }}
     >
-      {/* Sidebar */}
-      <Box
+      <Button
+        onClick={startNew}
         sx={{
-          display: "flex",
-          flexDirection: "column",
-          width: { xs: "100%", md: "30%" },
-          borderRight: { md: "1px solid #333" },
-          pr: { md: 2 },
-          maxHeight: "100%",
-          overflowY: "auto",
-          mb: { xs: 2, md: 0 },
+          mb: 2,
+          bgcolor: teal[700],
+          color: "white",
+          borderRadius: 2,
+          ":hover": { bgcolor: teal[600] },
         }}
       >
-        <Button
-          onClick={startNew}
-          sx={{
-            mb: 2,
-            bgcolor: teal[700],
-            color: "white",
-            borderRadius: 2,
-            ":hover": { bgcolor: teal[600] },
-          }}
-        >
-          New Conversation
-        </Button>
+        New Conversation
+      </Button>
 
-        {loadingConversations ? (
-          <CircularProgress size={24} sx={{ color: "white" }} />
-        ) : conversationSummaries.length === 0 ? (
-          <Typography color="white">No conversations found</Typography>
-        ) : (
-          conversationSummaries.map((s) => (
+      {loadingConversations ? (
+        <CircularProgress size={24} sx={{ color: "white" }} />
+      ) : conversationSummaries.length === 0 ? (
+        <Typography color="white">No conversations found</Typography>
+      ) : (
+        conversationSummaries.map((s) => {
+          const isActive =
+            s.conversationId === currentConversation.conversationId;
+          return (
             <Box
               key={s.conversationId}
               onClick={() => loadConversation(s.conversationId)}
@@ -288,13 +327,15 @@ const Chat = () => {
                 gap: 2,
                 p: 2,
                 mb: 1.5,
-                bgcolor: "rgba(255, 255, 255, 0.05)",
+                bgcolor: isActive
+                  ? "rgba(20,120,130,0.8)"
+                  : "rgba(255,255,255,0.05)",
                 borderRadius: 3,
                 cursor: "pointer",
                 boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
                 transition: "all 0.2s ease-in-out",
                 "&:hover": {
-                  bgcolor: "rgba(255, 255, 255, 0.1)",
+                  bgcolor: "rgba(255,255,255,0.1)",
                   transform: "scale(1.02)",
                 },
               }}
@@ -304,7 +345,7 @@ const Chat = () => {
                   width: 32,
                   height: 32,
                   bgcolor: teal[700],
-                  fontSize: "14px",
+                  fontSize: 14,
                   fontWeight: 600,
                 }}
               >
@@ -314,14 +355,48 @@ const Chat = () => {
                 variant="body1"
                 color="white"
                 noWrap
-                sx={{ flex: 1, fontWeight: 500, fontSize: "15px" }}
+                sx={{ flex: 1, fontWeight: 500, fontSize: 15 }}
               >
                 {s.lastMessage?.content || "Empty conversation"}
               </Typography>
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(s.conversationId);
+                }}
+                sx={{ color: "rgba(255,255,255,0.5)", ml: 1 }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
             </Box>
-          ))
-        )}
-      </Box>
+          );
+        })
+      )}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ display: "flex", height: "100vh" }}>
+      {/* Drawer for small screens */}
+      {!isMdUp && (
+        <Drawer
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            "& .MuiDrawer-paper": {
+              width: "80%",
+              boxSizing: "border-box",
+            },
+          }}
+        >
+          {sidebarContent}
+        </Drawer>
+      )}
+
+      {/* Always show sidebar on md+ */}
+      {isMdUp && sidebarContent}
 
       {/* Main Chat Panel */}
       <Box
@@ -331,24 +406,56 @@ const Chat = () => {
           flex: 1,
           px: { xs: 1, sm: 3 },
           width: "100%",
+          backgroundColor: "rgb(7, 15, 25)",
+          p: { xs: 1.5, sm: 2 },
         }}
       >
-        <Typography
+        {/* Menu button for small screens */}
+        {!isMdUp && (
+          <IconButton
+            onClick={() => setMobileOpen(true)}
+            sx={{ alignSelf: "flex-start", mb: 1, color: teal[300] }}
+          >
+            <MdMenu size={28} />
+          </IconButton>
+        )}
+
+        <Box
           sx={{
-            textAlign: "center",
-            fontSize: { xs: "28px", md: "40px" },
-            color: "white",
-            mb: 2,
-            mx: "auto",
-            fontWeight: 600,
-            background: `linear-gradient(90deg, ${teal[300]}, ${teal[100]})`,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 1,
           }}
         >
-          Chat with Gemini Pro
-        </Typography>
+          <Typography
+            sx={{
+              textAlign: "center",
+              fontSize: { xs: 28, md: 40 },
+              color: "white",
+              fontWeight: 600,
+              background: `linear-gradient(90deg, ${teal[300]}, ${teal[100]})`,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Chat with Gemini Pro
+          </Typography>
+          {currentConversation.conversationId && (
+            <Button
+              startIcon={<DeleteIcon />}
+              color="error"
+              onClick={() =>
+                handleDelete(currentConversation.conversationId)
+              }
+              disabled={loadingConversations}
+            >
+              Delete this chat
+            </Button>
+          )}
+        </Box>
 
+        {/* Chat History */}
         <Box
           ref={chatContainerRef}
           sx={{
@@ -369,11 +476,9 @@ const Chat = () => {
               {error}
             </Typography>
           )}
-
           {currentConversation.messages.map((msg, i) => (
             <Chatitem key={i} content={msg.content} role={msg.role} />
           ))}
-
           {loading && (
             <Box
               sx={{
@@ -392,6 +497,7 @@ const Chat = () => {
           )}
         </Box>
 
+        {/* Input & Controls */}
         <Box
           sx={{
             display: "flex",
@@ -405,44 +511,32 @@ const Chat = () => {
             <MdMic size={28} color={isListening ? red[500] : teal[300]} />
           </IconButton>
 
-          <TextField
-            variant="filled"
-            value={inputText}
-            onChange={handleInputChange}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !loading) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            placeholder="Type a message"
-            fullWidth
-            InputProps={{
-              disableUnderline: true,
-            }}
+          <Autocomplete
+            freeSolo
+            options={suggestions}
+            inputValue={inputText}
+            onInputChange={handleInputChange}
+            filterOptions={(opts) => opts}
             sx={{
+              flex: 1,
               background: "rgba(255,255,255,0.1)",
-              color: "white",
               borderRadius: 3,
             }}
-            select={suggestions.length > 0}
-            SelectProps={{
-              MenuProps: { PaperProps: { sx: { mt: -1 } } },
-            }}
-          >
-            {suggestions.map((s, idx) => (
-              <MenuItem
-                key={idx}
-                value={s}
-                onClick={() => {
-                  setInputText(s);
-                  setSuggestions([]);
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                variant="filled"
+                placeholder="Type a message"
+                InputProps={{ ...params.InputProps, disableUnderline: true }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !loading) {
+                    e.preventDefault();
+                    handleSubmit();
+                  }
                 }}
-              >
-                {s}
-              </MenuItem>
-            ))}
-          </TextField>
+              />
+            )}
+          />
 
           <IconButton onClick={() => fileInputRef.current.click()}>
             <MdUploadFile size={28} color={teal[300]} />
@@ -455,13 +549,11 @@ const Chat = () => {
             />
           </IconButton>
 
-          <IconButton onClick={handleStream} disabled={loading}>
+          <IconButton onClick={handleSubmit} disabled={loading}>
             <MdSend size={28} color={teal[300]} />
           </IconButton>
         </Box>
       </Box>
     </Box>
   );
-};
-
-export default Chat;
+}

@@ -1,20 +1,18 @@
 const jwt = require("jsonwebtoken");
 
+// Create JWT
 const createToken = (id, email, expiresIn) => {
   const payload = { id, email };
-  const token = jwt.sign(payload, process.env.JWT_SECRET, {
-    expiresIn,
-  });
-  return token;
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 };
 
-const verifyToken = async (req, res, next) => {
+// Middleware to verify JWT from cookie
+const verifyToken = (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(" ")[1];
+    const token = req.cookies?.auth_token;
 
     if (!token || token.trim() === "") {
-      return res.status(401).json({ message: "Token not received" });
+      return res.status(401).json({ message: "Token not found in cookie" });
     }
 
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {

@@ -133,45 +133,82 @@ export function streamChat({ message, conversationId, onChunk, onDone, onError }
  */
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
   const reader = new FileReader();
+
   reader.onload = () => {
     const base64 = reader.result.split(",")[1];
     const payload = { imageBase64: base64, message: text, conversationId };
+
     fetchWithAuth(`${api.defaults.baseURL}/chat/upload`, {
       method: "POST",
       body: JSON.stringify(payload),
     })
       .then((res) => {
         if (!res.ok) throw new Error("Upload streaming failed");
+
         const streamReader = res.body.getReader();
         const decoder = new TextDecoder("utf-8");
         let buffer = "";
+
         function read() {
           streamReader.read().then(({ done, value }) => {
-            if (done) return onDone(buffer);
+            if (done) {
+              if (buffer.trim()) onDone(buffer); // fallback final emit
+              return;
+            }
+
             buffer += decoder.decode(value, { stream: true });
             const parts = buffer.split("\n\n");
+
             parts.slice(0, -1).forEach((block) => {
-              const line = block.split("\n").find((l) => l.startsWith("data: "));
-              if (line) {
-                try {
-                  const parsed = JSON.parse(line.replace("data: ", ""));
-                  if (parsed.part) onChunk(parsed.part);
-                  if (parsed.text) onDone(parsed.text);
-                } catch {}
+              const lines = block.split("\n");
+              const eventLine = lines.find((l) => l.startsWith("event:"));
+              const dataLine = lines.find((l) => l.startsWith("data:"));
+
+              if (!dataLine) return;
+
+              const eventType = eventLine?.replace("event:", "").trim() || "message";
+              const rawData = dataLine.replace("data:", "").trim();
+
+              try {
+                const parsed = JSON.parse(rawData);
+                if (eventType === "chunk" && parsed.part) {
+                  onChunk(parsed.part);
+                } else if (eventType === "done" && parsed.text) {
+                  onDone(parsed.text);
+                } else if (eventType === "error") {
+                  console.error("⚠️ Server-side error:", parsed.error);
+                  onError(new Error(parsed.error));
+                }
+              } catch (err) {
+                console.error("❌ Failed to parse SSE block:", err, rawData);
               }
             });
+
             buffer = parts[parts.length - 1];
             read();
           });
         }
+
         read();
       })
       .catch(onError);
   };
+
   reader.onerror = onError;
   reader.readAsDataURL(file);
-}
+};
 
+/**
++ * Delete a conversation by ID.
++ * DELETE /api/v1/chat/conversations/:conversationId
++ */
+export const deleteConversation = async (conversationId) => {
+  const res = await api.delete(`/chat/conversations/${conversationId}`);
+  if (res.status !== 200) {
+    throw new Error("Failed to delete conversation");
+  }
+ return res.data; // { message: "Deleted" }
+};
 /**
  * Smart suggestions / autocomplete.
  * POST /api/v1/chat/suggest
