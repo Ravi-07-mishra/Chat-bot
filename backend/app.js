@@ -19,6 +19,10 @@ if (!process.env.JWT_SECRET || !process.env.COOKIE_SECRET || !process.env.MONGO_
 
 const app = express();
 
+// -------- Trust Proxy (for rate-limit and secure headers behind proxies) ----------
+// If you're behind a proxy (Render, Vercel), trust the first proxy hop:
+app.set('trust proxy', 1);
+
 // -------- Global Middleware ----------
 app.use(helmet()); // Secure HTTP headers
 app.use(compression()); // Enable gzip compression
@@ -29,7 +33,7 @@ app.use(cookieParser(process.env.COOKIE_SECRET)); // Signed cookies
 // -------- Rate Limiting (Prevent abuse) --------
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Max requests per IP
+  max: 100,                // Max requests per IP
   message: "Too many requests from this IP, please try again later.",
 });
 app.use("/api", limiter);
@@ -38,10 +42,11 @@ app.use("/api", limiter);
 app.use(
   cors({
     origin: (origin, callback) => {
+      // Allow non-browser tools (curl, Postman) or local/dev/prod domains
       if (
-        !origin ||                         // allow non-browser tools like curl/postman
-        origin.includes("localhost") ||    // allow local development
-        /\.vercel\.app$/.test(new URL(origin).hostname) // allow all vercel.app subdomains
+        !origin ||                        
+        origin.includes("localhost") ||  
+        /\.vercel\.app$/.test(new URL(origin).hostname)
       ) {
         callback(null, true);
       } else {
@@ -54,7 +59,6 @@ app.use(
   })
 );
 
-
 // -------- Application Routes ----------
 app.use("/api/v1", appRouter);
 
@@ -66,10 +70,20 @@ app.use((req, res) => {
 // -------- Error Handler Middleware ----------
 app.use((err, req, res, next) => {
   console.error("🔥 Internal Server Error:", err.stack || err.message);
+  // If CORS error, respond accordingly
+  if (err.message === "CORS Not Allowed") {
+    return res.status(403).json({ message: "CORS not allowed" });
+  }
   res.status(500).json({
     message: "Internal Server Error",
     error: process.env.NODE_ENV === "production" ? undefined : err.message,
   });
+});
+
+// -------- Start Server ----------
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
 
 module.exports = app;
