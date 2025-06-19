@@ -1,17 +1,16 @@
-// src/assets/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   loginUser,
   signupUser,
   checkAuthStatus,
-} from "../../helpers/api-communicator";
+} from "../../services/chatService";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser]         = useState(null);
+  const [user, setUser] = useState(null);
   const [isLoggedIn, setLogged] = useState(false);
   const navigate = useNavigate();
 

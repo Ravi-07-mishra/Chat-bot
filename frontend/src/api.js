@@ -1,23 +1,19 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "/api",    // ← works in both dev (Vite proxy) and prod (Vercel rewrite)
+  baseURL: "/api",    // ← must be exactly "/api" so proxy + rewrite both work
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
 
-// attach JWT if present
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("bot_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// global 401 handler
 api.interceptors.response.use(
   (res) => res,
   (err) => {

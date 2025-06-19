@@ -104,7 +104,7 @@ export function uploadFile({ file, text = "", conversationId, onChunk, onDone, o
     })
       .then((res) => {
         if (!res.ok) throw new Error("Upload streaming failed");
-        // reuse same streaming logic as above...
+        // reuse same streaming logic if needed
       })
       .catch(onError);
   };
