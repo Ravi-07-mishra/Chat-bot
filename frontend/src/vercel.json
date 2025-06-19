@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "chat‑bot‑frontend",
+  "name": "chat-bot-frontend",
   "builds": [
     {
       "src": "frontend/package.json",
@@ -9,13 +9,14 @@
     }
   ],
   "routes": [
-    // 1) First, catch /api/* and forward it to your Render app (note: no /api/v1 in the src)
     {
       "src": "/api/(.*)",
-      "dest": "https://chat‑bot‑0je8.onrender.com/api/v1/$1"
+      "dest": "https://chat-bot-0je8.onrender.com/api/v1/$1"
     },
-    // 2) Then let all other requests fall through to your React SPA
     { "handle": "filesystem" },
-    { "src": "/.*", "dest": "/index.html" }
+    {
+      "src": "/.*",
+      "dest": "/index.html"
+    }
   ]
 }
