@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "/api",    // ← must be exactly "/api" so proxy + rewrite both work
+  baseURL: "/api/v1",    // ← must be exactly "/api" so proxy + rewrite both work
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
