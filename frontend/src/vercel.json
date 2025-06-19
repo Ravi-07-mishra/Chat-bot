@@ -1,19 +1,8 @@
 {
-  "version": 2,
-  "name": "chat-bot-frontend",
-  "builds": [
+  "rewrites": [
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "frontend/dist" }
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "https://chat-bot-0je8.onrender.com/api/v1/$1"
-    },
-    { "handle": "filesystem" },
-    { "src": "/.*", "dest": "/index.html" }
   ]
 }
