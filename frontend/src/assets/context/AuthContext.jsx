@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import React from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   loginUser,
   signupUser,
@@ -12,22 +11,23 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [isLoggedIn, setLogged] = useState(false);
+  const [isLoggedIn, setLogged] = useState(null); // initially null, not false
   const navigate = useNavigate();
 
+  // 🔧 Load auth status ONCE — don't redirect here
   useEffect(() => {
     (async () => {
       try {
         const data = await checkAuthStatus();
         setUser({ email: data.email, name: data.name });
         setLogged(true);
-        navigate("/chat");
       } catch {
         setLogged(false);
       }
     })();
-  }, [navigate]);
+  }, []);
 
+  // 🔒 Manual login
   const login = async (email, password) => {
     const data = await loginUser(email, password);
     setUser({ email: data.email, name: data.name });
@@ -35,6 +35,7 @@ export const AuthProvider = ({ children }) => {
     navigate("/chat");
   };
 
+  // 🔒 Manual signup
   const signup = async (name, email, password) => {
     const data = await signupUser(name, email, password);
     setUser({ email: data.email, name: data.name });
@@ -42,6 +43,7 @@ export const AuthProvider = ({ children }) => {
     navigate("/chat");
   };
 
+  // 🔓 Logout
   const logout = async () => {
     try {
       await api.post("/user/logout");

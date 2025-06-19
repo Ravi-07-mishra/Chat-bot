@@ -8,6 +8,7 @@ import Notfound from "./pages/Notfound";
 import Header from './components/Header';
 import "./index.css";
 import Chat from "./pages/Chat";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
@@ -19,7 +20,11 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat" element={
+            <ProtectedRoute>
+            <Chat />
+            </ProtectedRoute>
+            } />
           <Route path="*" element={<Notfound />} />
         </Routes>
       </div>
