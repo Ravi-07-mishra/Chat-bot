@@ -39,25 +39,7 @@ const limiter = rateLimit({
 app.use("/api", limiter);
 
 // -------- CORS Configuration ----------
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow non-browser tools (curl, Postman) or local/dev/prod domains
-      if (
-        !origin ||                        
-        origin.includes("localhost") ||  
-        /\.vercel\.app$/.test(new URL(origin).hostname)
-      ) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS Not Allowed"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+app.use(cors({ origin: true, credentials: true }));
 
 // -------- Application Routes ----------
 app.use("/api/v1", appRouter);
