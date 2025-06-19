@@ -3,7 +3,7 @@ import {
   loginUser,
   signupUser,
   checkAuthStatus,
-} from "../../services/chatService";
+} from "../../helpers/api-communicator";
 import { useNavigate } from "react-router-dom";
 import api from "../../api";
 
