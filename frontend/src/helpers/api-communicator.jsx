@@ -21,12 +21,13 @@ export const loginUser = async (email, password) => {
 };
 
 export const checkAuthStatus = async () => {
-  const res = await api.get("/user/auth-status");
+  const res = await api.get("/user/auth-status", { withCredentials: true });
   if (res.status !== 200) {
     throw new Error("Not authenticated");
   }
-  return res.data;
+  return res.data.user; // or res.data, depending on your API
 };
+
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
 
