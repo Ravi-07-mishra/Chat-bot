@@ -1,8 +1,17 @@
 // src/api.js
 import axios from "axios";
 
+// detect dev vs prod
+const isDev = import.meta.env.DEV;
+
+// in dev: point at your Render (or localhost) URL;
+// in prod: use relative /api so Vercel will proxy to Render
+const baseURL = isDev
+  ? import.meta.env.VITE_API_URL   // e.g. https://chat‑bot-0je8.onrender.com/api/v1
+  : "/api";
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL, // now uses Vite env variable
+  baseURL,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -23,7 +32,6 @@ api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      // Optional: logout user or redirect to login
       localStorage.removeItem("bot_token");
       window.location.href = "/login";
     }

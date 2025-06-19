@@ -1,22 +1,21 @@
 {
   "version": 2,
-  "name": "chat-bot-frontend",
+  "name": "chat‑bot‑frontend",
   "builds": [
     {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/dist"
-      }
+      "config": { "distDir": "frontend/dist" }
     }
   ],
   "routes": [
+    // 1) First, catch /api/* and forward it to your Render app (note: no /api/v1 in the src)
     {
-      "handle": "filesystem"
+      "src": "/api/(.*)",
+      "dest": "https://chat‑bot‑0je8.onrender.com/api/v1/$1"
     },
-    {
-      "src": "/.*",
-      "dest": "/index.html"
-    }
+    // 2) Then let all other requests fall through to your React SPA
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/index.html" }
   ]
 }
