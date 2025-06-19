@@ -37,12 +37,23 @@ app.use("/api", limiter);
 // -------- CORS Configuration ----------
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (
+        !origin ||                         // allow non-browser tools like curl/postman
+        origin.includes("localhost") ||    // allow local development
+        /\.vercel\.app$/.test(new URL(origin).hostname) // allow all vercel.app subdomains
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS Not Allowed"));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
+
 
 // -------- Application Routes ----------
 app.use("/api/v1", appRouter);
