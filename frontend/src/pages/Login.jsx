@@ -1,4 +1,5 @@
-import React, { useEffect } from "react";
+// src/pages/Login.jsx
+import React from "react";
 import {
   Box,
   Button,
@@ -10,7 +11,7 @@ import {
 } from "@mui/material";
 import CustomizedInput from "../components/shared/CustomizedInput";
 import { RiLoginCircleFill } from "react-icons/ri";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../assets/context/AuthContext";
 import toast from "react-hot-toast";
 
@@ -20,30 +21,27 @@ const Login = () => {
   const theme = useTheme();
   const isMdUp = useMediaQuery(theme.breakpoints.up("md"));
 
-  // ✅ Prevent showing login again if already logged in
-  useEffect(() => {
-    if (auth.isLoggedIn === true) {
-      navigate("/chat");
-    }
-  }, [auth.isLoggedIn, navigate]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
     const email = data.get("email");
     const password = data.get("password");
+
     try {
       toast.loading("Signing in...", { id: "login" });
       await auth.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
-      // ✅ No need to navigate here, useEffect will handle it
+      // ❌ No need to navigate here — handled inside login()
     } catch {
       toast.error("Signing failed", { id: "login" });
     }
   };
 
-  // ⏳ Optional: render nothing if we're checking auth status
+  // ⏳ While checking auth status
   if (auth.isLoggedIn === null) return null;
+
+  // ✅ Already logged in
+  if (auth.isLoggedIn === true) return <Navigate to="/chat" />;
 
   return (
     <Box
