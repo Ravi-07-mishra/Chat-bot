@@ -1,5 +1,13 @@
-import React from "react";
-import { Box, Button, Container, Paper, Typography, useTheme, useMediaQuery } from "@mui/material";
+import React, { useEffect } from "react";
+import {
+  Box,
+  Button,
+  Container,
+  Paper,
+  Typography,
+  useTheme,
+  useMediaQuery,
+} from "@mui/material";
 import CustomizedInput from "../components/shared/CustomizedInput";
 import { RiLoginCircleFill } from "react-icons/ri";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +20,13 @@ const Login = () => {
   const theme = useTheme();
   const isMdUp = useMediaQuery(theme.breakpoints.up("md"));
 
+  // ✅ Prevent showing login again if already logged in
+  useEffect(() => {
+    if (auth.isLoggedIn === true) {
+      navigate("/chat");
+    }
+  }, [auth.isLoggedIn, navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
@@ -21,14 +36,25 @@ const Login = () => {
       toast.loading("Signing in...", { id: "login" });
       await auth.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
-      navigate("/chat");
+      // ✅ No need to navigate here, useEffect will handle it
     } catch {
       toast.error("Signing failed", { id: "login" });
     }
   };
 
+  // ⏳ Optional: render nothing if we're checking auth status
+  if (auth.isLoggedIn === null) return null;
+
   return (
-    <Box sx={{ minHeight: "100vh", backgroundColor: "#0a0a0a", py: 4, display: "flex", alignItems: "center" }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        backgroundColor: "#0a0a0a",
+        py: 4,
+        display: "flex",
+        alignItems: "center",
+      }}
+    >
       <Container maxWidth="lg">
         <Box
           sx={{
@@ -38,14 +64,16 @@ const Login = () => {
             gap: 4,
           }}
         >
-          {/* Illustration */}
           {isMdUp && (
             <Box flex={1} textAlign="center">
-              <img src="airobot.png" alt="Robot" style={{ maxWidth: 400, width: "100%" }} />
+              <img
+                src="airobot.png"
+                alt="Robot"
+                style={{ maxWidth: 400, width: "100%" }}
+              />
             </Box>
           )}
 
-          {/* Form */}
           <Box flex={1}>
             <Paper
               component="form"
