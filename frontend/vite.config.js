@@ -1,8 +1,6 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  // no proxy needed when you use an absolute URL
-  server: {
-    // proxy: { … }   ← remove this
-  },
+  plugins: [react()],
 });
