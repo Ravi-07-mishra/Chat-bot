@@ -2,32 +2,23 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
-  withCredentials: true,
+  baseURL: import.meta.env.VITE_API_URL,  // e.g. https://my-api.onrender.com/api/v1
+  withCredentials: true,                  // send cookies on every request
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
   },
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("bot_token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
+// Response interceptor for 401 from protected endpoints (if ever needed)
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     const status = err.response?.status;
-    const hadAuthHeader = Boolean(err.config.headers?.Authorization);
-
-    if (status === 401 && hadAuthHeader) {
-      // only redirect if this was a “real” logged‑in request
-      localStorage.removeItem("bot_token");
+    // only redirect on 401 if user was already authenticated (cookie present)
+    if (status === 401 && document.cookie.includes("auth_token")) {
       window.location.href = "/login";
     }
-
     return Promise.reject(err);
   }
 );

@@ -31,16 +31,12 @@ const Login = () => {
       toast.loading("Signing in...", { id: "login" });
       await auth.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
-      // ❌ No need to navigate here — handled inside login()
     } catch {
       toast.error("Signing failed", { id: "login" });
     }
   };
 
-  // ⏳ While checking auth status
   if (auth.isLoggedIn === null) return null;
-
-  // ✅ Already logged in
   if (auth.isLoggedIn === true) return <Navigate to="/chat" />;
 
   return (
@@ -83,12 +79,24 @@ const Login = () => {
                 backgroundColor: "#121212",
               }}
             >
-              <Typography variant="h4" align="center" gutterBottom color="white">
+              <Typography
+                variant="h4"
+                align="center"
+                gutterBottom
+                color="white"
+              >
                 Login
               </Typography>
+
               <CustomizedInput type="email" name="email" label="Email" />
               <Box my={2} />
-              <CustomizedInput type="password" name="password" label="Password" />
+              <CustomizedInput
+                type="password"
+                name="password"
+                label="Password"
+              />
+
+              {/* Primary Login Button */}
               <Button
                 type="submit"
                 fullWidth
@@ -102,6 +110,21 @@ const Login = () => {
                 }}
               >
                 Login
+              </Button>
+
+              {/* Go to Chat Button (same style) */}
+              <Button
+                fullWidth
+                variant="contained"
+                sx={{
+                  mt: 2,
+                  bgcolor: "#00fffc",
+                  color: "black",
+                  ":hover": { bgcolor: "#ffffff" },
+                }}
+                onClick={() => navigate("/chat")}
+              >
+                Go to Chat
               </Button>
             </Paper>
           </Box>

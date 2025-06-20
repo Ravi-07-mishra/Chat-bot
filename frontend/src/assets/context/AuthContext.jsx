@@ -1,9 +1,7 @@
+// src/assets/context/AuthContext.js
+
 import React, { createContext, useContext, useEffect, useState } from "react";
-import {
-  loginUser,
-  signupUser,
-  checkAuthStatus,
-} from "../../helpers/api-communicator";
+import { loginUser, signupUser, checkAuthStatus } from "../../helpers/api-communicator";
 import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../api";
 
@@ -15,11 +13,17 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ On first load, check if user is authenticated
+  // ✅ On mount, run auth-status check unless on login/signup
   useEffect(() => {
+    if (location.pathname === "/login" || location.pathname === "/signup") {
+      // skip check on public pages
+      setLogged(false);
+      return;
+    }
+
     (async () => {
       try {
-        const data = await checkAuthStatus();
+        const data = await checkAuthStatus();  // sends cookie, expects 200
         setUser({ email: data.email, name: data.name });
         setLogged(true);
       } catch {
@@ -27,11 +31,11 @@ export const AuthProvider = ({ children }) => {
         setLogged(false);
       }
     })();
-  }, []);
+  }, [location.pathname]);
 
   // 🔐 Manual login
   const login = async (email, password) => {
-    const data = await loginUser(email, password);
+    const data = await loginUser(email, password);  // sets cookie
     setUser({ email: data.email, name: data.name });
     setLogged(true);
     navigate("/chat");
@@ -39,7 +43,7 @@ export const AuthProvider = ({ children }) => {
 
   // 🔐 Manual signup
   const signup = async (name, email, password) => {
-    const data = await signupUser(name, email, password);
+    const data = await signupUser(name, email, password);  // sets cookie
     setUser({ email: data.email, name: data.name });
     setLogged(true);
     navigate("/chat");
@@ -48,15 +52,14 @@ export const AuthProvider = ({ children }) => {
   // 🔓 Logout
   const logout = async () => {
     try {
-      await api.post("/user/logout");
+      await api.post("/user/logout"); // clears cookie server‑side
     } catch (err) {
       console.error("Logout error:", err.message);
     }
-    localStorage.removeItem("bot_token");
     setUser(null);
     setLogged(false);
 
-    // Only redirect if not already on login page
+    // redirect to login if not already there
     if (location.pathname !== "/login") {
       navigate("/login");
     }
