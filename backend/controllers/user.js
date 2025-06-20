@@ -127,17 +127,23 @@ const verifyUser = async (req, res) => {
 // POST /logout
 const logoutuser = (req, res) => {
   try {
-    res.clearCookie("auth_token", getCookieSettings(req));
+    const cookieSettings = {
+      ...getCookieSettings(),
+      maxAge: 0 // Immediately expire the cookie
+    };
+    
+    res.clearCookie('auth_token', cookieSettings);
+    
     return res.status(200).json({
       success: true,
-      message: "Logged out successfully",
+      message: "Logged out successfully"
     });
   } catch (error) {
     console.error("Logout error:", error);
     return res.status(500).json({
       success: false,
       message: "Logout failed",
-      cause: error.message,
+      cause: error.message
     });
   }
 };

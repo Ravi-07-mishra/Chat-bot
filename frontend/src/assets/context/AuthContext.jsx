@@ -1,5 +1,4 @@
 // src/assets/context/AuthContext.js
-
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { loginUser, signupUser, checkAuthStatus } from "../../helpers/api-communicator";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -10,63 +9,104 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoggedIn, setLogged] = useState(null); // null = loading, true/false = known
+  const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ On mount, run auth-status check unless on login/signup
+  // Auth status verification
+  const verifyAuthStatus = async () => {
+    setIsLoading(true);
+    try {
+      const data = await checkAuthStatus();
+      setUser({ email: data.email, name: data.name });
+      setLogged(true);
+    } catch (err) {
+      handleLogout(false); // Silent logout without redirect
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Unified logout handler
+  const handleLogout = (shouldRedirect = true) => {
+    // Clear frontend state
+    setUser(null);
+    setLogged(false);
+    
+    // Clear cookies aggressively
+    document.cookie = 'auth_token=; Path=/; Domain=.onrender.com; ' + 
+      'Expires=Thu, 01 Jan 1970 00:00:01 GMT; Secure; SameSite=None';
+    
+    if (shouldRedirect && location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+    }
+  };
+
+  // Initial auth check and route change handler
   useEffect(() => {
-    if (location.pathname === "/login" || location.pathname === "/signup") {
-      // skip check on public pages
+    const publicRoutes = ["/login", "/signup"];
+    
+    if (publicRoutes.includes(location.pathname)) {
       setLogged(false);
+      setIsLoading(false);
       return;
     }
 
-    (async () => {
-      try {
-        const data = await checkAuthStatus();  // sends cookie, expects 200
-        setUser({ email: data.email, name: data.name });
-        setLogged(true);
-      } catch {
-        setUser(null);
-        setLogged(false);
-      }
-    })();
+    verifyAuthStatus();
   }, [location.pathname]);
 
-  // 🔐 Manual login
+  // Login handler
   const login = async (email, password) => {
-    const data = await loginUser(email, password);  // sets cookie
-    setUser({ email: data.email, name: data.name });
-    setLogged(true);
-    navigate("/chat");
+    try {
+      setIsLoading(true);
+      const data = await loginUser(email, password);
+      setUser({ email: data.email, name: data.name });
+      setLogged(true);
+      navigate("/chat", { replace: true });
+    } catch (err) {
+      throw err; // Let login form handle the error
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // 🔐 Manual signup
+  // Signup handler
   const signup = async (name, email, password) => {
-    const data = await signupUser(name, email, password);  // sets cookie
-    setUser({ email: data.email, name: data.name });
-    setLogged(true);
-    navigate("/chat");
+    try {
+      setIsLoading(true);
+      const data = await signupUser(name, email, password);
+      setUser({ email: data.email, name: data.name });
+      setLogged(true);
+      navigate("/chat", { replace: true });
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // 🔓 Logout
+  // Logout handler
   const logout = async () => {
     try {
-      await api.post("/user/logout"); // clears cookie server‑side
+      setIsLoading(true);
+      await api.post("/user/logout", {}, { withCredentials: true });
     } catch (err) {
-      console.error("Logout error:", err.message);
-    }
-    setUser(null);
-    setLogged(false);
-
-    // redirect to login if not already there
-    if (location.pathname !== "/login") {
-      navigate("/login");
+      console.error("Logout API error:", err);
+    } finally {
+      handleLogout();
+      window.location.reload(); // Full reset to ensure clean state
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, login, signup, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      isLoggedIn, 
+      isLoading,
+      login, 
+      signup, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );
