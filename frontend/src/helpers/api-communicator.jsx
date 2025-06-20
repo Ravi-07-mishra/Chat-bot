@@ -50,7 +50,7 @@ export const sendChatMessage = async (message, conversationId = null) => {
 // ─── SSE STREAM ───────────────────────────────────────────────────────────────
 
 export function streamChat({ message, conversationId, onChunk, onDone, onError }) {
-  fetch("/api/chat/stream", {
+  fetch("/chat/stream", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -93,7 +93,7 @@ export function uploadFile({ file, text = "", conversationId, onChunk, onDone, o
   const reader = new FileReader();
   reader.onload = () => {
     const base64 = reader.result.split(",")[1];
-    fetch("/api/chat/upload", {
+    fetch("/chat/upload", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
