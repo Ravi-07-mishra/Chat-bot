@@ -50,7 +50,10 @@ app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
+app.use((req, res, next) => {
+  console.log("📥 Incoming cookies:", req.hostname, req.path, req.cookies);
+  next();
+});
 
 // Rate Limiting - more production-appropriate settings
 const limiter = rateLimit({

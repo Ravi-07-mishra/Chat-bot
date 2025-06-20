@@ -20,51 +20,34 @@ export const AuthProvider = ({ children }) => {
       const data = await checkAuthStatus();
       setUser({ email: data.email, name: data.name });
       setLogged(true);
-    } catch (err) {
-      handleLogout(false); // Silent logout without redirect
+    } catch {
+      // If 401, simply clear state (server cleared cookie on a previous logout)
+      setUser(null);
+      setLogged(false);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Unified logout handler
-  const handleLogout = (shouldRedirect = true) => {
-    // Clear frontend state
-    setUser(null);
-    setLogged(false);
-    
-    // Clear cookies aggressively
-    document.cookie = 'auth_token=; Path=/; Domain=.onrender.com; ' + 
-      'Expires=Thu, 01 Jan 1970 00:00:01 GMT; Secure; SameSite=None';
-    
-    if (shouldRedirect && location.pathname !== "/login") {
-      navigate("/login", { replace: true });
     }
   };
 
   // Initial auth check and route change handler
   useEffect(() => {
     const publicRoutes = ["/login", "/signup"];
-    
     if (publicRoutes.includes(location.pathname)) {
       setLogged(false);
       setIsLoading(false);
-      return;
+    } else {
+      verifyAuthStatus();
     }
-
-    verifyAuthStatus();
   }, [location.pathname]);
 
   // Login handler
   const login = async (email, password) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const data = await loginUser(email, password);
       setUser({ email: data.email, name: data.name });
       setLogged(true);
       navigate("/chat", { replace: true });
-    } catch (err) {
-      throw err; // Let login form handle the error
     } finally {
       setIsLoading(false);
     }
@@ -72,14 +55,12 @@ export const AuthProvider = ({ children }) => {
 
   // Signup handler
   const signup = async (name, email, password) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const data = await signupUser(name, email, password);
       setUser({ email: data.email, name: data.name });
       setLogged(true);
       navigate("/chat", { replace: true });
-    } catch (err) {
-      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -87,26 +68,22 @@ export const AuthProvider = ({ children }) => {
 
   // Logout handler
   const logout = async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      await api.post("/user/logout", {}, { withCredentials: true });
+      await api.post("/user/logout"); // withCredentials is automatic
     } catch (err) {
       console.error("Logout API error:", err);
     } finally {
-      handleLogout();
-      window.location.reload(); // Full reset to ensure clean state
+      // Clear local state; server has cleared the HttpOnly cookie
+      setUser(null);
+      setLogged(false);
+      setIsLoading(false);
+      navigate("/login", { replace: true });
     }
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isLoggedIn, 
-      isLoading,
-      login, 
-      signup, 
-      logout 
-    }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, isLoading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
