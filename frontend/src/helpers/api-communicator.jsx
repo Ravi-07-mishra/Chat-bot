@@ -22,9 +22,15 @@ export const loginUser = async (email, password) => {
 };
 
 export const checkAuthStatus = async () => {
-  const res = await api.get("/user/auth-status");
-  if (res.status !== 200) throw new Error("Not authenticated");
-  return res.data.user;
+  try {
+    const res = await api.get("/user/auth-status");
+    return res.data.user;
+  } catch (err) {
+    if (err.response?.status === 401) {
+      throw new Error("Not authenticated");
+    }
+    throw err;
+  }
 };
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────

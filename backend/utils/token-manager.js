@@ -9,17 +9,18 @@ const createToken = (id, email, expiresIn) => {
 // Middleware to verify JWT from cookie
 const verifyToken = (req, res, next) => {
   try {
-    // 🛠️ Look in signedCookies first
- const token = req.cookies?.auth_token; // ✅ only use cookies
-
-
-    if (!token || token.trim() === "") {
+    // Check both signed and unsigned cookies
+    const token = req.signedCookies?.auth_token || req.cookies?.auth_token;
+    
+    if (!token) {
       return res.status(401).json({ message: "Token not found in cookie" });
     }
 
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
       if (err) {
         console.error("JWT Verification Error:", err.message);
+        // Clear invalid cookie
+        res.clearCookie("auth_token", getCookieSettings(req));
         return res.status(401).json({ message: "Token expired or invalid" });
       }
 
@@ -31,5 +32,4 @@ const verifyToken = (req, res, next) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 module.exports = { createToken, verifyToken };

@@ -3,18 +3,15 @@ const bcrypt = require("bcryptjs");
 const { createToken } = require("../utils/token-manager");
 
 // Cookie configuration helper
-const getCookieSettings = (req) => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  return {
-    path: "/",
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'None' : 'Lax',
-   
-    ...(isProduction && { maxAge: 7 * 24 * 60 * 60 * 1000 }) // 7 days in production
-  };
-};
+// In your token-manager.js
+const getCookieSettings = (req) => ({
+  httpOnly: true,
+  secure: true, // REQUIRED for Render.com (always HTTPS)
+  sameSite: 'None', // REQUIRED for cross-origin on Render
+  domain: 'chat-bot-0je8.onrender.com', // Your exact Render domain
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000
+});
 
 // GET all users (admin/debug only — exclude passwords)
 const getAllusers = async (req, res) => {
