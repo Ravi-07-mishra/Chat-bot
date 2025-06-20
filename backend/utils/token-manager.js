@@ -10,7 +10,8 @@ const createToken = (id, email, expiresIn) => {
 const verifyToken = (req, res, next) => {
   try {
     // 🛠️ Look in signedCookies first
-    const token = req.signedCookies?.auth_token || req.cookies?.auth_token;
+ const token = req.cookies?.auth_token; // ✅ only use cookies
+
 
     if (!token || token.trim() === "") {
       return res.status(401).json({ message: "Token not found in cookie" });

@@ -2,6 +2,20 @@ const User = require("../models/User");
 const bcrypt = require("bcryptjs");
 const { createToken } = require("../utils/token-manager");
 
+// Cookie configuration helper
+const getCookieSettings = (req) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  return {
+    path: "/",
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'None' : 'Lax',
+   
+    ...(isProduction && { maxAge: 7 * 24 * 60 * 60 * 1000 }) // 7 days in production
+  };
+};
+
 // GET all users (admin/debug only — exclude passwords)
 const getAllusers = async (req, res) => {
   try {
@@ -25,7 +39,7 @@ const userSignup = async (req, res) => {
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(12); // More secure than 10
+    const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // Create and save user
@@ -35,16 +49,8 @@ const userSignup = async (req, res) => {
     // Create JWT token
     const token = createToken(user._id.toString(), user.email, "7d");
 
-    // Set secure cookie
-    res.cookie("auth_token", token, {
-  path: "/",
-  httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  signed: true,
-  domain: "chat-bot-0je8.onrender.com",  // ← add this
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-});
+    // Set secure cookie with dynamic settings
+    res.cookie("auth_token", token, getCookieSettings(req));
 
     return res.status(201).json({
       message: "User created successfully",
@@ -79,17 +85,8 @@ const userLogin = async (req, res) => {
     // Create JWT token
     const token = createToken(user._id.toString(), user.email, "7d");
 
-    // Set secure cookie
-   res.cookie("auth_token", token, {
-  path: "/",
-  httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  signed: true,
-  domain: "chat-bot-0je8.onrender.com",  // ← add this
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-});
-
+    // Set secure cookie with dynamic settings
+    res.cookie("auth_token", token, getCookieSettings(req));
 
     return res.status(200).json({
       message: "Login successful",
@@ -133,13 +130,7 @@ const verifyUser = async (req, res) => {
 // POST /logout
 const logoutuser = (req, res) => {
   try {
-    res.clearCookie("auth_token", {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-    });
-
+    res.clearCookie("auth_token", getCookieSettings(req));
     return res.status(200).json({
       success: true,
       message: "Logged out successfully",
