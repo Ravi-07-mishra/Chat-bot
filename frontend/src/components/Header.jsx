@@ -1,11 +1,17 @@
-import { AppBar, Toolbar, Box } from '@mui/material';
+import { AppBar, Toolbar, Box, Button } from '@mui/material';
 import React from 'react';
 import Logo from './shared/Logo';
 import { useAuth } from '../assets/context/AuthContext';
 import NavigationLink from './shared/NavigationLink';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const Header = () => {
   const auth = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isOnChatPage = location.pathname === "/chat";
+
   return (
     <AppBar
       sx={{
@@ -36,7 +42,19 @@ const Header = () => {
         >
           {auth?.isLoggedIn ? (
             <>
-            
+              {!isOnChatPage && (
+                <Button
+                  variant="contained"
+                  sx={{
+                    bgcolor: "#00fffc",
+                    color: "black",
+                    ":hover": { bgcolor: "#ffffff" },
+                  }}
+                  onClick={() => navigate("/chat")}
+                >
+                  Go to Chat
+                </Button>
+              )}
               <button
                 style={{
                   backgroundColor: "#51538f",

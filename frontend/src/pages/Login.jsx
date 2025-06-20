@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import React from "react";
 import {
   Box,
@@ -31,8 +30,8 @@ const Login = () => {
       toast.loading("Signing in...", { id: "login" });
       await auth.login(email, password);
       toast.success("Signed in Successfully", { id: "login" });
-    } catch {
-      toast.error("Signing failed", { id: "login" });
+    } catch (err) {
+      toast.error(err?.response?.data?.cause || "Signing failed", { id: "login" });
     }
   };
 
@@ -96,7 +95,6 @@ const Login = () => {
                 label="Password"
               />
 
-              {/* Primary Login Button */}
               <Button
                 type="submit"
                 fullWidth
@@ -110,21 +108,6 @@ const Login = () => {
                 }}
               >
                 Login
-              </Button>
-
-              {/* Go to Chat Button (same style) */}
-              <Button
-                fullWidth
-                variant="contained"
-                sx={{
-                  mt: 2,
-                  bgcolor: "#00fffc",
-                  color: "black",
-                  ":hover": { bgcolor: "#ffffff" },
-                }}
-                onClick={() => navigate("/chat")}
-              >
-                Go to Chat
               </Button>
             </Paper>
           </Box>

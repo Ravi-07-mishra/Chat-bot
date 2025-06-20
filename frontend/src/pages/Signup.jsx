@@ -1,4 +1,3 @@
-// src/pages/Signup.jsx
 import React from "react";
 import {
   Box,
@@ -33,8 +32,8 @@ const Signup = () => {
       await auth.signup(name, email, password);
       toast.success("Signed up successfully!", { id: "signup" });
       navigate("/chat");
-    } catch {
-      toast.error("Signup failed. Please try again.", { id: "signup" });
+    } catch (err) {
+      toast.error(err?.response?.data?.cause || "Signup failed", { id: "signup" });
     }
   };
 
@@ -97,7 +96,6 @@ const Signup = () => {
                 label="Password"
               />
 
-              {/* Primary Signup Button */}
               <Button
                 type="submit"
                 fullWidth
@@ -111,21 +109,6 @@ const Signup = () => {
                 }}
               >
                 Signup
-              </Button>
-
-              {/* Go to Chat Button (same style) */}
-              <Button
-                fullWidth
-                variant="contained"
-                sx={{
-                  mt: 2,
-                  bgcolor: "#00fffc",
-                  color: "black",
-                  ":hover": { bgcolor: "#ffffff" },
-                }}
-                onClick={() => navigate("/chat")}
-              >
-                Go to Chat
               </Button>
             </Paper>
           </Box>
