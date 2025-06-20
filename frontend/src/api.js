@@ -1,9 +1,9 @@
+// src/api.js
 import axios from "axios";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-   withCredentials: true,
-   // 🔥 uses absolute URL
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
@@ -19,10 +19,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+    const hadAuthHeader = Boolean(err.config.headers?.Authorization);
+
+    if (status === 401 && hadAuthHeader) {
+      // only redirect if this was a “real” logged‑in request
       localStorage.removeItem("bot_token");
       window.location.href = "/login";
     }
+
     return Promise.reject(err);
   }
 );

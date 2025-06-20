@@ -12,10 +12,14 @@ import {
   Drawer,
   useTheme,
   useMediaQuery,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { red, teal } from "@mui/material/colors";
-import { MdSend, MdMic, MdUploadFile, MdMenu } from "react-icons/md";
+import { MdSend, MdMic, MdUploadFile, MdMenu, MdPause, MdPlayArrow } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -56,12 +60,48 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  // Redirect if not logged in
+  // ─── Speech Synthesis States & Handlers ─────────────────────────────────────
+  const [lang, setLang] = useState("en-US");
+  const [isPaused, setPaused] = useState(false);
+
+  const handleLangChange = (e) => {
+    setLang(e.target.value);
+  };
+
+  const handlePauseResume = () => {
+    if (!("speechSynthesis" in window)) return;
+    if (isPaused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setPaused(true);
+    }
+  };
+
+  // 🔊 Speak the latest assistant message
+  useEffect(() => {
+    const msgs = currentConversation.messages;
+    if (msgs.length === 0) return;
+
+    const last = msgs[msgs.length - 1];
+    if (last.role === "assistant" && "speechSynthesis" in window) {
+      // cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      setPaused(false);
+
+      const utterance = new SpeechSynthesisUtterance(last.content);
+      utterance.lang = lang;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [currentConversation.messages, lang]);
+
+  // ─── Redirect if not logged in ──────────────────────────────────────────────
   useEffect(() => {
     if (!auth?.isLoggedIn) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
-  // Auto‑scroll on new messages or loading
+  // ─── Auto‑scroll on new messages or loading ─────────────────────────────────
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop =
@@ -69,7 +109,7 @@ export default function Chat() {
     }
   }, [currentConversation.messages, loading]);
 
-  // Load all conversation summaries
+  // ─── Load all conversation summaries ────────────────────────────────────────
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -83,7 +123,7 @@ export default function Chat() {
     }
   };
 
-  // Load a specific conversation
+  // ─── Load a specific conversation ───────────────────────────────────────────
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
@@ -98,7 +138,7 @@ export default function Chat() {
     }
   };
 
-  // Delete a conversation
+  // ─── Delete a conversation ─────────────────────────────────────────────────
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     setLoadingConversations(true);
@@ -116,7 +156,7 @@ export default function Chat() {
     }
   };
 
-  // Send message (no optimistic UI)
+  // ─── Send message (no optimistic UI) ────────────────────────────────────────
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text) return;
@@ -139,7 +179,7 @@ export default function Chat() {
     }
   };
 
-  // SSE streaming helper
+  // ─── SSE streaming helper ──────────────────────────────────────────────────
   const handleStream = () => {
     const text = inputText.trim();
     if (!text) return;
@@ -178,7 +218,7 @@ export default function Chat() {
     });
   };
 
-  // File upload + streaming
+  // ─── File upload + streaming ───────────────────────────────────────────────
   const handleFileUpload = () => {
     const file = fileInputRef.current.files[0];
     if (!file) return;
@@ -217,7 +257,7 @@ export default function Chat() {
     });
   };
 
-  // Debounced suggestions fetch
+  // ─── Debounced suggestions fetch ───────────────────────────────────────────
   const handleInputChange = (event, value, reason) => {
     setInputText(value || "");
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -236,7 +276,7 @@ export default function Chat() {
     }
   };
 
-  // Web Speech API setup (empty deps to avoid loops)
+  // ─── Web Speech API setup (empty deps to avoid loops) ─────────────────────
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -269,19 +309,19 @@ export default function Chat() {
     }
   };
 
-  // New conversation
+  // ─── New conversation ──────────────────────────────────────────────────────
   const startNew = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
     if (!isMdUp) setMobileOpen(false);
   };
 
-  // Initial load
+  // ─── Initial load ──────────────────────────────────────────────────────────
   useEffect(() => {
     loadConversationSummaries();
   }, []);
 
-  // Sidebar content
+  // ─── Sidebar content ───────────────────────────────────────────────────────
   const sidebarContent = (
     <Box
       sx={{
@@ -507,10 +547,40 @@ export default function Chat() {
             flexWrap: "wrap",
           }}
         >
+          {/* mic (speech-to-text) */}
           <IconButton onClick={toggleSpeech}>
             <MdMic size={28} color={isListening ? red[500] : teal[300]} />
           </IconButton>
 
+          {/* play/pause assistant voice */}
+          <IconButton onClick={handlePauseResume}>
+            {isPaused ? (
+              <MdPlayArrow size={28} color={teal[300]} />
+            ) : (
+              <MdPause size={28} color={teal[300]} />
+            )}
+          </IconButton>
+
+          {/* language selector */}
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel sx={{ color: "white" }}>Language</InputLabel>
+            <Select
+              value={lang}
+              label="Language"
+              onChange={handleLangChange}
+              sx={{
+                color: "white",
+                ".MuiOutlinedInput-notchedOutline": { borderColor: "white" },
+              }}
+            >
+              <MenuItem value="en-US">English (US)</MenuItem>
+              <MenuItem value="en-GB">English (UK)</MenuItem>
+              <MenuItem value="hi-IN">Hindi</MenuItem>
+              <MenuItem value="es-ES">Español</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* autocomplete/text input */}
           <Autocomplete
             freeSolo
             options={suggestions}
@@ -538,6 +608,7 @@ export default function Chat() {
             )}
           />
 
+          {/* file upload */}
           <IconButton onClick={() => fileInputRef.current.click()}>
             <MdUploadFile size={28} color={teal[300]} />
             <input
@@ -549,6 +620,7 @@ export default function Chat() {
             />
           </IconButton>
 
+          {/* send button */}
           <IconButton onClick={handleSubmit} disabled={loading}>
             <MdSend size={28} color={teal[300]} />
           </IconButton>
