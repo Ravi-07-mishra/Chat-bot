@@ -37,12 +37,14 @@ const userSignup = async (req, res) => {
 
     // Set secure cookie
     res.cookie("auth_token", token, {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+  path: "/",
+  httpOnly: true,
+  secure: true,
+  sameSite: "None",
+  signed: true,
+  domain: "chat-bot-0je8.onrender.com",  // ← add this
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
 
     return res.status(201).json({
       message: "User created successfully",
@@ -78,13 +80,16 @@ const userLogin = async (req, res) => {
     const token = createToken(user._id.toString(), user.email, "7d");
 
     // Set secure cookie
-    res.cookie("auth_token", token, {
-      path: "/",
-      httpOnly: true,
-      secure: true,
-      sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+   res.cookie("auth_token", token, {
+  path: "/",
+  httpOnly: true,
+  secure: true,
+  sameSite: "None",
+  signed: true,
+  domain: "chat-bot-0je8.onrender.com",  // ← add this
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
 
     return res.status(200).json({
       message: "Login successful",

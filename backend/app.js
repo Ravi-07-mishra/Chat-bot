@@ -11,7 +11,6 @@ const appRouter = require("./routes");
 
 // Load environment variables
 dotenv.config();
-
 if (!process.env.JWT_SECRET || !process.env.COOKIE_SECRET || !process.env.MONGO_URI) {
   console.error("❌ Required environment variables are missing.");
   process.exit(1);
@@ -19,32 +18,31 @@ if (!process.env.JWT_SECRET || !process.env.COOKIE_SECRET || !process.env.MONGO_
 
 const app = express();
 
-// -------- Trust Proxy (for rate-limit and secure headers behind proxies) ----------
-// If you're behind a proxy (Render, Vercel), trust the first proxy hop:
-app.set('trust proxy', 1);
+// Trust first proxy (for secure cookies behind proxies)
+app.set("trust proxy", 1);
 
-// -------- Global Middleware ----------
-app.use(helmet()); // Secure HTTP headers
-app.use(compression()); // Enable gzip compression
-app.use(morgan("combined")); // Detailed logs for production
-app.use(express.json({ limit: "1mb" })); // Limit request body size
-app.use(cookieParser(process.env.COOKIE_SECRET)); // Signed cookies
+// Global Middleware
+app.use(helmet());
+app.use(compression());
+app.use(morgan("combined"));
+app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser(process.env.COOKIE_SECRET));
 
-// -------- Rate Limiting (Prevent abuse) --------
+// Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                // Max requests per IP
-  message: "Too many requests from this IP, please try again later.",
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Too many requests, please try again later.",
 });
 app.use("/api", limiter);
 
-// -------- CORS Configuration ----------
+// CORS Configuration (allow all Vercel subdomains + localhost)
 app.use(
   cors({
-    origin: function (origin, callback) {
+    origin: (origin, callback) => {
       if (
-        !origin || // allow server-to-server or curl
-        origin.includes("vercel.app") || // allow all Vercel subdomains
+        !origin ||                      // server-to-server or curl
+        origin.includes("vercel.app") ||// any Vercel preview or production
         origin === "http://localhost:5173"
       ) {
         callback(null, true);
@@ -52,22 +50,21 @@ app.use(
         callback(new Error("CORS Not Allowed"));
       }
     },
-    credentials: true,
+    credentials: true, // allow cookies
   })
 );
 
-// -------- Application Routes ----------
+// API Routes under /api/v1
 app.use("/api/v1", appRouter);
 
-// -------- 404 Fallback ----------
+// 404 Fallback
 app.use((req, res) => {
   res.status(404).json({ message: "Route not found" });
 });
 
-// -------- Error Handler Middleware ----------
+// Error Handler
 app.use((err, req, res, next) => {
   console.error("🔥 Internal Server Error:", err.stack || err.message);
-  // If CORS error, respond accordingly
   if (err.message === "CORS Not Allowed") {
     return res.status(403).json({ message: "CORS not allowed" });
   }
@@ -76,11 +73,5 @@ app.use((err, req, res, next) => {
     error: process.env.NODE_ENV === "production" ? undefined : err.message,
   });
 });
-
-// -------- Start Server ----------
-// const PORT = process.env.PORT || 4000;
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server running on port ${PORT}`);
-// });
 
 module.exports = app;

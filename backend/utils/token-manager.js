@@ -9,7 +9,8 @@ const createToken = (id, email, expiresIn) => {
 // Middleware to verify JWT from cookie
 const verifyToken = (req, res, next) => {
   try {
-    const token = req.cookies?.auth_token;
+    // 🛠️ Look in signedCookies first
+    const token = req.signedCookies?.auth_token || req.cookies?.auth_token;
 
     if (!token || token.trim() === "") {
       return res.status(401).json({ message: "Token not found in cookie" });
