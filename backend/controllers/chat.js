@@ -159,7 +159,7 @@ async function generateChatCompletion(req, res) {
 }
 
 // ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
-a// ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
+// ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
