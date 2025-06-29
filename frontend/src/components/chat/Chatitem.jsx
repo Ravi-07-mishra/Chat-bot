@@ -1,10 +1,9 @@
-// src/components/chat/Chatitem.jsx
 import React, { useCallback, lazy, Suspense } from "react";
 import { Avatar, Box, Typography, Paper, useTheme, useMediaQuery } from "@mui/material";
 import { teal, grey } from "@mui/material/colors";
 import { useAuth } from "../../assets/context/AuthContext";
 
-// Lazy‑load the syntax highlighter
+// Lazy-load the syntax highlighter
 const SyntaxHighlighter = lazy(() =>
   import("react-syntax-highlighter").then((mod) => ({
     default: mod.Prism,
@@ -42,7 +41,6 @@ const Chatitem = ({ content, role }) => {
               );
             }
           } else {
-            // Determine language
             let lang = "javascript";
             let code = seg;
             const firstLine = seg.split("\n")[0].trim();
@@ -84,6 +82,7 @@ const Chatitem = ({ content, role }) => {
         return parts;
       }
 
+      // If the message is not a code block, handle it as regular text or HTML
       return (
         <Typography
           color="white"
@@ -122,7 +121,7 @@ const Chatitem = ({ content, role }) => {
         }}
       >
         {isBot ? (
-          <img src="/openai.png" alt="bot" width="24" height="24" />
+          <img src="/gemini_logo.png" alt="bot" width="24" height="24" />
         ) : (
           auth.user?.name?.[0] || "U"
         )}
