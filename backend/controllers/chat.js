@@ -2,6 +2,7 @@ const fs = require("fs");
 const User = require("../models/User");
 const { randomUUID } = require("crypto");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const axios = require("axios");
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Helper to pause
@@ -21,12 +22,29 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
+// Fetch live data from Google Custom Search API
+async function fetchLiveData(query) {
+  try {
+    const response = await axios.get(`https://www.googleapis.com/customsearch/v1`, {
+      params: {
+        key: process.env.GOOGLE_API_KEY,
+        cx: process.env.CUSTOM_SEARCH_ENGINE_ID,
+        q: query
+      }
+    });
+    return response.data.items ? response.data.items : [];
+  } catch (error) {
+    console.error("Error fetching live data:", error);
+    return [];
+  }
+}
+
 // Summarize messages for context
 async function summarizeMessages(memories) {
   const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
   const prompt = [
     { role: "user", parts: [{ text: "Summarize these messages succinctly:" }] },
-    ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
+    ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] }))
   ];
   const res = await generateWithRetry(model, { contents: prompt });
   return (
@@ -41,11 +59,17 @@ async function generateChatCompletion(req, res) {
     const { message, conversationId } = req.body;
     const userMessage = message?.trim();
     if (!userMessage) {
-      return res.status(400).json({ message: "message required" });
+      return res.status(400).json({ message: "Message required" });
     }
 
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) return res.status(401).json({ message: "User not found" });
+
+    // Check if the message is a query for live data (e.g., weather or news)
+    if (userMessage.toLowerCase().includes("weather") || userMessage.toLowerCase().includes("news")) {
+      const liveData = await fetchLiveData(userMessage);
+      return res.json({ liveData });
+    }
 
     // Find or create conversation
     let conv = conversationId
@@ -74,7 +98,7 @@ async function generateChatCompletion(req, res) {
     if (conv.summary) {
       contents.push({
         role: "system",
-        parts: [{ text: `Summary:\n${conv.summary}` }],
+        parts: [{ text: `Summary:\n${conv.summary}` }]
       });
     }
     conv.messages.forEach((m) =>
@@ -116,7 +140,7 @@ async function streamChat(req, res) {
     if (!userMessage) {
       res.write(
         `event: error\ndata:${JSON.stringify({
-          error: "message required",
+          error: "Message required",
         })}\n\n`
       );
       return res.end();
@@ -129,6 +153,13 @@ async function streamChat(req, res) {
           error: "Invalid user",
         })}\n\n`
       );
+      return res.end();
+    }
+
+    // Check if the message is a query for live data (e.g., weather or news)
+    if (userMessage.toLowerCase().includes("weather") || userMessage.toLowerCase().includes("news")) {
+      const liveData = await fetchLiveData(userMessage);
+      res.write(`event: liveData\ndata:${JSON.stringify({ liveData })}\n\n`);
       return res.end();
     }
 
@@ -153,7 +184,7 @@ async function streamChat(req, res) {
     if (conv.summary) {
       contents.push({
         role: "system",
-        parts: [{ text: `Summary:\n${conv.summary}` }],
+        parts: [{ text: `Summary:\n${conv.summary}` }]
       });
     }
     conv.messages.forEach((m) =>
@@ -192,15 +223,12 @@ async function streamChat(req, res) {
 
 // ─── FILE / IMAGE UPLOAD (SSE) ─────────────────────────────────────────────────
 async function handleUpload(req, res) {
-  // Determine whether we got a real file (via multer) or Base64 in JSON
   let mimeType, imageBase64;
 
   if (req.file) {
-    // multer path (if you ever re‑enable it)
     mimeType = req.file.mimetype;
     imageBase64 = fs.readFileSync(req.file.path, { encoding: "base64" });
   } else if (req.body.imageBase64) {
-    // JSON Base64 path
     imageBase64 = req.body.imageBase64;
     mimeType = req.body.mimeType || "image/jpeg";
   } else {
@@ -209,7 +237,6 @@ async function handleUpload(req, res) {
 
   const userMessage = (req.body.message || "Please describe this image.").trim();
 
-  // Begin SSE
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
@@ -228,7 +255,6 @@ async function handleUpload(req, res) {
       return res.end();
     }
 
-    // Find or create conversation
     let conv = req.body.conversationId
       ? user.conversations.find(
           (c) => c.conversationId === req.body.conversationId
@@ -246,7 +272,6 @@ async function handleUpload(req, res) {
     conv.messages.push({ role: "user", content: userMessage });
     await user.save();
 
-    // Build contents including the inline image data
     const contents = [
       ...(conv.summary
         ? [{ role: "system", parts: [{ text: `Summary:\n${conv.summary}` }] }]
@@ -297,6 +322,8 @@ async function handleUpload(req, res) {
     res.end();
   }
 }
+
+// ─── DELETE CONVERSATION ───────────────────────────────────────────────────
 async function deleteConversation(req, res) {
   try {
     const user = await User.findById(res.locals.jwtData.id);
@@ -319,7 +346,8 @@ async function deleteConversation(req, res) {
     return res.status(500).json({ message: err.message || "Internal error" });
   }
 }
-// ─── SMART SUGGESTIONS ─────────────────────────────────────────────────────────
+
+// ─── SMART SUGGESTIONS ──────────────────────────────────────────────────────
 async function getSuggestions(req, res) {
   const { prefix } = req.body;
   if (!prefix || prefix.length < 2) {
@@ -358,31 +386,6 @@ async function getSuggestions(req, res) {
     console.warn("getSuggestions error:", err);
     return res.json({ suggestions: [] });
   }
-}
-
-// ─── LIST & RETRIEVE ───────────────────────────────────────────────────────────
-async function getConversationsSummary(req, res) {
-  const user = await User.findById(res.locals.jwtData.id);
-  if (!user) return res.status(401).json({ message: "Invalid user" });
-
-  const conversations = user.conversations.map((c) => ({
-    conversationId: c.conversationId,
-    lastMessage: c.messages.slice(-1)[0] || null,
-    summary: c.summary || "",
-  }));
-  return res.json({ conversations });
-}
-
-async function getConversationById(req, res) {
-  const user = await User.findById(res.locals.jwtData.id);
-  if (!user) return res.status(401).json({ message: "Invalid user" });
-
-  const conv = user.conversations.find(
-    (c) => c.conversationId === req.params.conversationId
-  );
-  if (!conv) return res.status(404).json({ message: "Not found" });
-
-  return res.json({ conversation: conv });
 }
 
 module.exports = {
