@@ -24,59 +24,61 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
 
 // Transform Google search results into Gemini-friendly format
 function transformToGeminiFormat(data) {
-  return data.map(item => {
-    return {
-      role: "system",
-      parts: [{
-        text: `${item.title}: ${item.snippet}\nLink: ${item.link}`
-      }]
-    };
-  });
+  return data.map(item => ({
+    role: "system",
+    parts: [{ text: `${item.title}: ${item.snippet}\nLink: ${item.link}` }]
+  }));
 }
 
-// Fetch live data from Google Custom Search API for different query types
+// Format live data as rich text
+function formatLiveData(query, data) {
+  if (!data || data.length === 0) return 'No results found.';
+  
+  return data.map(item => {
+    const parts = item.parts[0].text.split('\n');
+    const title = parts[0].replace(': ', '');
+    const snippet = parts.slice(1, -1).join('\n');
+    const link = parts[parts.length - 1].replace('Link: ', '');
+    
+    return `<div style="margin-bottom:15px;padding-left:10px;border-left:3px solid #26a69a;">
+      <a href="${link}" target="_blank" style="color:#26a69a;font-weight:bold;text-decoration:none;">
+        ${title}
+      </a>
+      <p style="color:#e0e0e0;margin-top:5px;">${snippet}</p>
+    </div>`;
+  }).join('');
+}
+
+// Fetch live data from Google (with improved error handling)
 async function fetchLiveData(query) {
   try {
-    // Ensure the API Key and CX ID are set
     if (!process.env.GOOGLE_API_KEY || !process.env.CUSTOM_SEARCH_ENGINE_ID) {
-      throw new Error('API Key or Custom Search Engine ID is missing.');
+      throw new Error('API configuration missing');
     }
 
-    // Make the request to the Google Custom Search API
     const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
       params: {
         key: process.env.GOOGLE_API_KEY,
         cx: process.env.CUSTOM_SEARCH_ENGINE_ID,
         q: query,
+        num: 5
       },
+      timeout: 5000
     });
 
-    // Return transformed data in Gemini format
-    return response.data.items ? transformToGeminiFormat(response.data.items) : [];
+    if (!response.data?.items || !Array.isArray(response.data.items)) {
+      console.warn('No items array in response');
+      return [];
+    }
+
+    return response.data.items;
   } catch (error) {
-    console.error('Error fetching live data:', error);
+    console.error('Search error:', error.message);
     return [];
   }
 }
 
-// Format the live data for better readability
-function formatLiveData(query, data) {
-  if (!data || data.length === 0) return 'No results found.';
-  return data.map((item) => `${item.parts[0].text}`).join('\n\n');
-}
-
-// Summarize messages for context using Gemini AI
-async function summarizeMessages(memories) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-  const prompt = [
-    { role: 'user', parts: [{ text: 'Summarize these messages succinctly:' }] },
-    ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] }))
-  ];
-  const res = await generateWithRetry(model, { contents: prompt });
-  return res.response.candidates[0].content.parts[0].text || 'Unable to summarize.';
-}
-
-// Main function to handle generating chat completion
+// Main chat completion function
 async function generateChatCompletion(req, res) {
   try {
     const { message, conversationId } = req.body;
@@ -88,26 +90,11 @@ async function generateChatCompletion(req, res) {
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // Check if the message is a query for live data (weather, news, sports, etc.)
-    let liveData = [];
-    if (userMessage.toLowerCase().includes('weather')) {
-      liveData = await fetchLiveData('current weather');
-    } else if (userMessage.toLowerCase().includes('news')) {
-      liveData = await fetchLiveData('latest news');
-    } else if (userMessage.toLowerCase().includes('sports') || userMessage.toLowerCase().includes('2025') || userMessage.toLowerCase().includes('current')) {
-      liveData = await fetchLiveData('current sports updates 2025');
-    }
-
-    // If live data is found, format and return it
-    if (liveData.length > 0) {
-      const formattedData = formatLiveData(userMessage, liveData);
-      return res.json({ liveData: formattedData });
-    }
-
-    // Proceed with conversation if no live data query
+    // Create or load conversation
     let conv = conversationId
-      ? user.conversations.find((c) => c.conversationId === conversationId)
+      ? user.conversations.id(conversationId)
       : null;
+
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
@@ -117,9 +104,39 @@ async function generateChatCompletion(req, res) {
       user.conversations.push(conv);
     }
 
+    // Add user message to conversation
     conv.messages.push({ role: 'user', content: userMessage });
 
-    // Summarize if > 20 messages
+    // Handle live data queries
+    let liveData = [];
+    const queryTriggers = {
+      weather: ['weather', 'forecast'],
+      news: ['news', 'headlines'],
+      sports: ['sports', 'score', 'game', 'match']
+    };
+
+    for (const [category, triggers] of Object.entries(queryTriggers)) {
+      if (triggers.some(trigger => userMessage.toLowerCase().includes(trigger))) {
+        liveData = await fetchLiveData(userMessage);
+        break;
+      }
+    }
+
+    // If live data found, create assistant message
+    if (liveData.length > 0) {
+      const formattedData = formatLiveData(userMessage, liveData);
+      
+      // Add live data as assistant message
+      conv.messages.push({
+        role: 'assistant',
+        content: `🔍 Live results for "${userMessage}":\n${formattedData}`
+      });
+
+      await user.save();
+      return res.json({ conversation: conv });
+    }
+
+    // Summarize if needed
     if (conv.messages.length > 20) {
       const old = conv.messages.splice(0, 10);
       const summary = await summarizeMessages(old);
@@ -134,7 +151,8 @@ async function generateChatCompletion(req, res) {
         parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
-    conv.messages.forEach((m) =>
+    
+    conv.messages.forEach(m => 
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
@@ -147,19 +165,18 @@ async function generateChatCompletion(req, res) {
     const candidate = result.response.candidates[0];
     const botText = candidate.content?.parts?.[0]?.text || '';
 
+    // Add AI response
     conv.messages.push({ role: 'assistant', content: botText });
     await user.save();
 
     return res.json({ conversation: conv });
   } catch (err) {
-    console.error('generateChatCompletion error:', err);
-    const status = err.status === 429 ? 503 : 500;
-    return res.status(status).json({ message: err.message || 'Internal error' });
+    console.error('Chat error:', err);
+    return res.status(500).json({ message: err.message || 'Internal error' });
   }
 }
 
-// ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
-// ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
+// SSE streaming function
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -171,46 +188,23 @@ async function streamChat(req, res) {
   try {
     const { message, conversationId } = req.body;
     const userMessage = message?.trim();
+    
     if (!userMessage) {
-      res.write(
-        `event: error\ndata:${JSON.stringify({
-          error: 'Message required',
-        })}\n\n`
-      );
+      res.write(`event: error\ndata:${JSON.stringify({error: 'Message required'})}\n\n`);
       return res.end();
     }
 
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
-      res.write(
-        `event: error\ndata:${JSON.stringify({
-          error: 'Invalid user',
-        })}\n\n`
-      );
+      res.write(`event: error\ndata:${JSON.stringify({error: 'Invalid user'})}\n\n`);
       return res.end();
     }
 
-    // Check if the message is a query for live data (weather, news, sports, etc.)
-    let liveData = [];
-    if (userMessage.toLowerCase().includes('weather')) {
-      liveData = await fetchLiveData('current weather');
-    } else if (userMessage.toLowerCase().includes('news')) {
-      liveData = await fetchLiveData('latest news');
-    } else if (userMessage.toLowerCase().includes('sports') || userMessage.toLowerCase().includes('2025') || userMessage.toLowerCase().includes('current')) {
-      liveData = await fetchLiveData('current sports updates 2025');
-    }
-
-    // If live data is found, format and return it
-    if (liveData.length > 0) {
-      const formattedData = formatLiveData(userMessage, liveData);
-      res.write(`event: liveData\ndata:${JSON.stringify({ liveData: formattedData })}\n\n`);
-      return res.end();
-    }
-
-    // Proceed with conversation if no live data query
+    // Create or load conversation
     let conv = conversationId
-      ? user.conversations.find((c) => c.conversationId === conversationId)
+      ? user.conversations.id(conversationId)
       : null;
+
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
@@ -220,9 +214,44 @@ async function streamChat(req, res) {
       user.conversations.push(conv);
     }
 
+    // Add user message
     conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
+    // Handle live data queries
+    let liveData = [];
+    const queryTriggers = {
+      weather: ['weather', 'forecast'],
+      news: ['news', 'headlines'],
+      sports: ['sports', 'score', 'game', 'match']
+    };
+
+    for (const [category, triggers] of Object.entries(queryTriggers)) {
+      if (triggers.some(trigger => userMessage.toLowerCase().includes(trigger))) {
+        liveData = await fetchLiveData(userMessage);
+        break;
+      }
+    }
+
+    // If live data found, send as assistant message
+    if (liveData.length > 0) {
+      const formattedData = formatLiveData(userMessage, liveData);
+      const liveMessage = `🔍 Live results for "${userMessage}":\n${formattedData}`;
+      
+      // Add to conversation
+      conv.messages.push({ role: 'assistant', content: liveMessage });
+      await user.save();
+
+      // Send as SSE event
+      res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMessage })}\n\n`);
+      res.write(`event: done\ndata:${JSON.stringify({
+        text: liveMessage,
+        conversationId: conv.conversationId
+      })}\n\n`);
+      return res.end();
+    }
+
+    // Generate AI response
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -230,7 +259,8 @@ async function streamChat(req, res) {
         parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
-    conv.messages.forEach((m) =>
+    
+    conv.messages.forEach(m => 
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
@@ -239,27 +269,26 @@ async function streamChat(req, res) {
 
     let buffer = '';
     for await (const chunk of stream.stream) {
-      const part = chunk.text() || '';
+      const part = chunk.text();
       buffer += part;
       res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
     }
 
+    // Add final response to conversation
     const finalText = buffer.trim();
     conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
-    res.write(
-      `event: done\ndata:${JSON.stringify({
-        text: finalText,
-        conversationId: conv.conversationId,
-      })}\n\n`
-    );
+    res.write(`event: done\ndata:${JSON.stringify({
+      text: finalText,
+      conversationId: conv.conversationId
+    })}\n\n`);
     res.end();
   } catch (err) {
-    console.error('streamChat error:', err);
-    res.write(
-      `event: error\ndata:${JSON.stringify({ error: err.message })}\n\n`
-    );
+    console.error('Stream error:', err);
+    res.write(`event: error\ndata:${JSON.stringify({
+      error: err.message || 'Stream failed'
+    })}\n\n`);
     res.end();
   }
 }
