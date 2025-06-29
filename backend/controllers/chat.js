@@ -22,6 +22,18 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
+// Transform Google search results into Gemini-friendly format
+function transformToGeminiFormat(data) {
+  return data.map(item => {
+    return {
+      role: "system",
+      parts: [{
+        text: `${item.title}: ${item.snippet}\nLink: ${item.link}`
+      }]
+    };
+  });
+}
+
 // Fetch live data from Google Custom Search API for different query types
 async function fetchLiveData(query) {
   try {
@@ -39,17 +51,10 @@ async function fetchLiveData(query) {
       },
     });
 
-    // Return search results or an empty array if no results are found
-    return response.data.items ? response.data.items : [];
+    // Return transformed data in Gemini format
+    return response.data.items ? transformToGeminiFormat(response.data.items) : [];
   } catch (error) {
     console.error('Error fetching live data:', error);
-
-    // Handle specific errors
-    if (error.response && error.response.status === 403) {
-      console.error('API Key or Custom Search Engine ID is incorrect or missing.');
-    } else {
-      console.error('Unknown error occurred while fetching live data.');
-    }
     return [];
   }
 }
@@ -57,34 +62,10 @@ async function fetchLiveData(query) {
 // Format the live data for better readability
 function formatLiveData(query, data) {
   if (!data || data.length === 0) return 'No results found.';
-
-  if (query.includes('weather')) {
-    const weather = data[0]; // Assuming the first result is weather
-    return `Current Weather: ${weather.title} - ${weather.snippet}`;
-  }
-
-  if (query.includes('news')) {
-    return data
-      .slice(0, 3) // Get top 3 results
-      .map((news) => `${news.title}: ${news.snippet}\nLink: ${news.link}`)
-      .join('\n\n');
-  }
-
-  if (query.includes('sports') || query.includes('2025') || query.includes('current')) {
-    return data
-      .slice(0, 3) // Get top 3 results
-      .map((item) => `${item.title}: ${item.snippet}\nLink: ${item.link}`)
-      .join('\n\n');
-  }
-
-  // Handle other cases (stocks, recipes, etc.)
-  return data
-    .slice(0, 3)
-    .map((item) => `${item.title}: ${item.snippet}\nLink: ${item.link}`)
-    .join('\n\n');
+  return data.map((item) => `${item.parts[0].text}`).join('\n\n');
 }
 
-// Summarize messages for context
+// Summarize messages for context using Gemini AI
 async function summarizeMessages(memories) {
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const prompt = [
@@ -92,13 +73,10 @@ async function summarizeMessages(memories) {
     ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] }))
   ];
   const res = await generateWithRetry(model, { contents: prompt });
-  return (
-    res.response.candidates[0].content.parts[0].text ||
-    'Unable to summarize.'
-  );
+  return res.response.candidates[0].content.parts[0].text || 'Unable to summarize.';
 }
 
-// ─── STANDARD CHAT ────────────────────────────────────────────────────────────
+// Main function to handle generating chat completion
 async function generateChatCompletion(req, res) {
   try {
     const { message, conversationId } = req.body;
@@ -181,6 +159,7 @@ async function generateChatCompletion(req, res) {
 }
 
 // ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
+a// ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
