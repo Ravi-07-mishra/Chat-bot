@@ -1,8 +1,8 @@
-const fs = require("fs");
-const User = require("../models/User");
-const { randomUUID } = require("crypto");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const axios = require("axios");
+const fs = require('fs');
+const User = require('../models/User');
+const { randomUUID } = require('crypto');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 // Helper to pause
@@ -22,34 +22,79 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
-// Fetch live data from Google Custom Search API
+// Fetch live data from Google Custom Search API for different query types
 async function fetchLiveData(query) {
   try {
-    const response = await axios.get(`https://www.googleapis.com/customsearch/v1`, {
+    // Ensure the API Key and CX ID are set
+    if (!process.env.GOOGLE_API_KEY || !process.env.CUSTOM_SEARCH_ENGINE_ID) {
+      throw new Error('API Key or Custom Search Engine ID is missing.');
+    }
+
+    // Make the request to the Google Custom Search API
+    const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
       params: {
         key: process.env.GOOGLE_API_KEY,
         cx: process.env.CUSTOM_SEARCH_ENGINE_ID,
-        q: query
-      }
+        q: query,
+      },
     });
+
+    // Return search results or an empty array if no results are found
     return response.data.items ? response.data.items : [];
   } catch (error) {
-    console.error("Error fetching live data:", error);
+    console.error('Error fetching live data:', error);
+
+    // Handle specific errors
+    if (error.response && error.response.status === 403) {
+      console.error('API Key or Custom Search Engine ID is incorrect or missing.');
+    } else {
+      console.error('Unknown error occurred while fetching live data.');
+    }
     return [];
   }
 }
 
+// Format the live data for better readability
+function formatLiveData(query, data) {
+  if (!data || data.length === 0) return 'No results found.';
+
+  if (query.includes('weather')) {
+    const weather = data[0]; // Assuming the first result is weather
+    return `Current Weather: ${weather.title} - ${weather.snippet}`;
+  }
+
+  if (query.includes('news')) {
+    return data
+      .slice(0, 3) // Get top 3 results
+      .map((news) => `${news.title}: ${news.snippet}\nLink: ${news.link}`)
+      .join('\n\n');
+  }
+
+  if (query.includes('sports') || query.includes('2025') || query.includes('current')) {
+    return data
+      .slice(0, 3) // Get top 3 results
+      .map((item) => `${item.title}: ${item.snippet}\nLink: ${item.link}`)
+      .join('\n\n');
+  }
+
+  // Handle other cases (stocks, recipes, etc.)
+  return data
+    .slice(0, 3)
+    .map((item) => `${item.title}: ${item.snippet}\nLink: ${item.link}`)
+    .join('\n\n');
+}
+
 // Summarize messages for context
 async function summarizeMessages(memories) {
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   const prompt = [
-    { role: "user", parts: [{ text: "Summarize these messages succinctly:" }] },
+    { role: 'user', parts: [{ text: 'Summarize these messages succinctly:' }] },
     ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] }))
   ];
   const res = await generateWithRetry(model, { contents: prompt });
   return (
     res.response.candidates[0].content.parts[0].text ||
-    "Unable to summarize."
+    'Unable to summarize.'
   );
 }
 
@@ -59,19 +104,29 @@ async function generateChatCompletion(req, res) {
     const { message, conversationId } = req.body;
     const userMessage = message?.trim();
     if (!userMessage) {
-      return res.status(400).json({ message: "Message required" });
+      return res.status(400).json({ message: 'Message required' });
     }
 
     const user = await User.findById(res.locals.jwtData.id);
-    if (!user) return res.status(401).json({ message: "User not found" });
+    if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // Check if the message is a query for live data (e.g., weather or news)
-    if (userMessage.toLowerCase().includes("weather") || userMessage.toLowerCase().includes("news")) {
-      const liveData = await fetchLiveData(userMessage);
-      return res.json({ liveData });
+    // Check if the message is a query for live data (weather, news, sports, etc.)
+    let liveData = [];
+    if (userMessage.toLowerCase().includes('weather')) {
+      liveData = await fetchLiveData('current weather');
+    } else if (userMessage.toLowerCase().includes('news')) {
+      liveData = await fetchLiveData('latest news');
+    } else if (userMessage.toLowerCase().includes('sports') || userMessage.toLowerCase().includes('2025') || userMessage.toLowerCase().includes('current')) {
+      liveData = await fetchLiveData('current sports updates 2025');
     }
 
-    // Find or create conversation
+    // If live data is found, format and return it
+    if (liveData.length > 0) {
+      const formattedData = formatLiveData(userMessage, liveData);
+      return res.json({ liveData: formattedData });
+    }
+
+    // Proceed with conversation if no live data query
     let conv = conversationId
       ? user.conversations.find((c) => c.conversationId === conversationId)
       : null;
@@ -79,60 +134,60 @@ async function generateChatCompletion(req, res) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
         messages: [],
-        summary: "",
+        summary: '',
       });
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ role: "user", content: userMessage });
+    conv.messages.push({ role: 'user', content: userMessage });
 
-    // Summarize if >20 messages
+    // Summarize if > 20 messages
     if (conv.messages.length > 20) {
       const old = conv.messages.splice(0, 10);
       const summary = await summarizeMessages(old);
-      conv.summary = (conv.summary || "") + "\n" + summary;
+      conv.summary = (conv.summary || '') + '\n' + summary;
     }
 
-    // Build prompt
+    // Generate AI response
     const contents = [];
     if (conv.summary) {
       contents.push({
-        role: "system",
-        parts: [{ text: `Summary:\n${conv.summary}` }]
+        role: 'system',
+        parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
     conv.messages.forEach((m) =>
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await generateWithRetry(model, {
       contents,
-      tool_config: { function_calling_config: { mode: "AUTO" } },
+      tool_config: { function_calling_config: { mode: 'AUTO' } },
     });
 
     const candidate = result.response.candidates[0];
-    const botText = candidate.content?.parts?.[0]?.text || "";
+    const botText = candidate.content?.parts?.[0]?.text || '';
 
-    conv.messages.push({ role: "assistant", content: botText });
+    conv.messages.push({ role: 'assistant', content: botText });
     await user.save();
 
     return res.json({ conversation: conv });
   } catch (err) {
-    console.error("generateChatCompletion error:", err);
+    console.error('generateChatCompletion error:', err);
     const status = err.status === 429 ? 503 : 500;
-    return res.status(status).json({ message: err.message || "Internal error" });
+    return res.status(status).json({ message: err.message || 'Internal error' });
   }
 }
 
 // ─── SSE STREAMING CHAT ───────────────────────────────────────────────────────
 async function streamChat(req, res) {
   res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
   });
-  res.write("\n");
+  res.write('\n');
 
   try {
     const { message, conversationId } = req.body;
@@ -140,7 +195,7 @@ async function streamChat(req, res) {
     if (!userMessage) {
       res.write(
         `event: error\ndata:${JSON.stringify({
-          error: "Message required",
+          error: 'Message required',
         })}\n\n`
       );
       return res.end();
@@ -150,20 +205,30 @@ async function streamChat(req, res) {
     if (!user) {
       res.write(
         `event: error\ndata:${JSON.stringify({
-          error: "Invalid user",
+          error: 'Invalid user',
         })}\n\n`
       );
       return res.end();
     }
 
-    // Check if the message is a query for live data (e.g., weather or news)
-    if (userMessage.toLowerCase().includes("weather") || userMessage.toLowerCase().includes("news")) {
-      const liveData = await fetchLiveData(userMessage);
-      res.write(`event: liveData\ndata:${JSON.stringify({ liveData })}\n\n`);
+    // Check if the message is a query for live data (weather, news, sports, etc.)
+    let liveData = [];
+    if (userMessage.toLowerCase().includes('weather')) {
+      liveData = await fetchLiveData('current weather');
+    } else if (userMessage.toLowerCase().includes('news')) {
+      liveData = await fetchLiveData('latest news');
+    } else if (userMessage.toLowerCase().includes('sports') || userMessage.toLowerCase().includes('2025') || userMessage.toLowerCase().includes('current')) {
+      liveData = await fetchLiveData('current sports updates 2025');
+    }
+
+    // If live data is found, format and return it
+    if (liveData.length > 0) {
+      const formattedData = formatLiveData(userMessage, liveData);
+      res.write(`event: liveData\ndata:${JSON.stringify({ liveData: formattedData })}\n\n`);
       return res.end();
     }
 
-    // Find or create conversation
+    // Proceed with conversation if no live data query
     let conv = conversationId
       ? user.conversations.find((c) => c.conversationId === conversationId)
       : null;
@@ -171,38 +236,37 @@ async function streamChat(req, res) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
         messages: [],
-        summary: "",
+        summary: '',
       });
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ role: "user", content: userMessage });
+    conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
-    // Build contents
     const contents = [];
     if (conv.summary) {
       contents.push({
-        role: "system",
-        parts: [{ text: `Summary:\n${conv.summary}` }]
+        role: 'system',
+        parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
     conv.messages.forEach((m) =>
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const stream = await model.generateContentStream({ contents });
 
-    let buffer = "";
+    let buffer = '';
     for await (const chunk of stream.stream) {
-      const part = chunk.text() || "";
+      const part = chunk.text() || '';
       buffer += part;
       res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
     }
 
     const finalText = buffer.trim();
-    conv.messages.push({ role: "assistant", content: finalText });
+    conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
     res.write(
@@ -213,7 +277,7 @@ async function streamChat(req, res) {
     );
     res.end();
   } catch (err) {
-    console.error("streamChat error:", err);
+    console.error('streamChat error:', err);
     res.write(
       `event: error\ndata:${JSON.stringify({ error: err.message })}\n\n`
     );
