@@ -387,6 +387,29 @@ async function getSuggestions(req, res) {
     return res.json({ suggestions: [] });
   }
 }
+async function getConversationsSummary(req, res) {
+  const user = await User.findById(res.locals.jwtData.id);
+  if (!user) return res.status(401).json({ message: "Invalid user" });
+
+  const conversations = user.conversations.map((c) => ({
+    conversationId: c.conversationId,
+    lastMessage: c.messages.slice(-1)[0] || null,
+    summary: c.summary || "",
+  }));
+  return res.json({ conversations });
+}
+
+async function getConversationById(req, res) {
+  const user = await User.findById(res.locals.jwtData.id);
+  if (!user) return res.status(401).json({ message: "Invalid user" });
+
+  const conv = user.conversations.find(
+    (c) => c.conversationId === req.params.conversationId
+  );
+  if (!conv) return res.status(404).json({ message: "Not found" });
+
+  return res.json({ conversation: conv });
+}
 
 module.exports = {
   generateChatCompletion,
