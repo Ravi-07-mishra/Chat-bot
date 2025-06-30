@@ -1,8 +1,6 @@
-// src/helpers/api-communicator.js
 import api from "../api";
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-
 export const signupUser = async (name, email, password) => {
   const res = await api.post("/user/signup", { name, email, password });
   if (![200, 201].includes(res.status)) {
@@ -45,9 +43,39 @@ export const getConversationById = async (id) => {
   return res.data.conversation;
 };
 
+// Create or get an existing conversation
+export const getOrCreateConversation = async (conversationId = null) => {
+  if (conversationId) {
+    // If conversationId is passed, return the existing conversation
+    try {
+      const conversation = await getConversationById(conversationId);
+      return conversation;
+    } catch (error) {
+      throw new Error("Conversation not found");
+    }
+  } else {
+    // Create a new conversation if no conversationId is passed
+    try {
+      const res = await api.post("/chat/new"); // Assuming your API has a POST route for creating a new conversation
+      return res.data.conversationId;
+    } catch (error) {
+      throw new Error("Failed to create a new conversation.");
+    }
+  }
+};
+
+// Send a message to an existing or new conversation
 export const sendChatMessage = async (message, conversationId = null) => {
-  const res = await api.post("/chat/new", { message, conversationId });
-  return res.data.conversation;
+  try {
+    if (!conversationId) {
+      // Create a new conversation if no conversationId is passed
+      conversationId = await getOrCreateConversation();
+    }
+    const res = await api.post("/chat/new", { message, conversationId });
+    return res.data.conversation;
+  } catch (error) {
+    throw new Error("Failed to send message.");
+  }
 };
 
 // ─── SSE STREAM ───────────────────────────────────────────────────────────────
@@ -70,6 +98,11 @@ function parseSSE(buffer, onChunk, onDone) {
 }
 
 export function streamChat({ message, conversationId, onChunk, onDone, onError }) {
+  // Ensure that conversationId is passed for streaming
+  if (!conversationId) {
+    throw new Error("Conversation ID is required for streaming.");
+  }
+
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -100,6 +133,11 @@ export function streamChat({ message, conversationId, onChunk, onDone, onError }
 // ─── UPLOAD + SSE ─────────────────────────────────────────────────────────────
 
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
+  // Ensure conversationId is passed
+  if (!conversationId) {
+    throw new Error("Conversation ID is required for file upload.");
+  }
+
   const reader = new FileReader();
 
   reader.onload = () => {

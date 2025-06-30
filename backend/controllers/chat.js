@@ -108,20 +108,20 @@ async function generateChatCompletion(req, res) {
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // Find the conversation by conversationId, or create a new one if not found
+    // Ensure conversation exists or create a new one
     let conv = conversationId ? user.conversations.id(conversationId) : null;
     if (!conv) {
       conv = user.conversations.create({
-        conversationId: randomUUID(), // Create a new conversationId
+        conversationId: randomUUID(), // Create a new conversationId if not passed
         messages: [],
       });
-      user.conversations.push(conv); // Add to the user's conversations
+      user.conversations.push(conv); // Add new conversation to user's conversations
     }
 
-    // Add the user message to the conversation
+    // Add user message to the conversation
     conv.messages.push({ role: 'user', content: userMessage });
 
-    // Handle live data queries (Google search data)
+    // Handle live data queries
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -136,7 +136,7 @@ async function generateChatCompletion(req, res) {
       }
     }
 
-    // If live data is found, transform and format it
+    // If live data found, transform and format it
     if (liveData.length > 0) {
       const transformedData = transformToGeminiFormat(liveData);
       const formattedData = formatLiveData(userMessage, transformedData);
@@ -166,9 +166,7 @@ async function generateChatCompletion(req, res) {
       });
     }
 
-    conv.messages.forEach(m =>
-      contents.push({ role: m.role, parts: [{ text: m.content }] })
-    );
+    conv.messages.forEach(m => contents.push({ role: m.role, parts: [{ text: m.content }] }));
 
     // Generate AI response using Google Gemini model
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -188,7 +186,7 @@ async function generateChatCompletion(req, res) {
   }
 }
 
-// streamChat function
+// Stream Chat function (for SSE)
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -212,21 +210,21 @@ async function streamChat(req, res) {
       return res.end();
     }
 
-    // Find the conversation by conversationId, or create a new one if not found
+    // Find or create the conversation
     let conv = conversationId ? user.conversations.id(conversationId) : null;
     if (!conv) {
       conv = user.conversations.create({
-        conversationId: randomUUID(), // Generate a new conversationId if none exists
+        conversationId: randomUUID(),
         messages: [],
       });
-      user.conversations.push(conv); // Add the conversation to the user's record
+      user.conversations.push(conv);
     }
 
-    // Add user message to the conversation
+    // Add user message to conversation
     conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
-    // Handle live data queries (Google search data)
+    // Handle live data queries
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -241,7 +239,7 @@ async function streamChat(req, res) {
       }
     }
 
-    // If live data found, send it as assistant message
+    // Send live data if available
     if (liveData.length > 0) {
       const transformedData = transformToGeminiFormat(liveData);
       const liveMessage = `I found these results for "${userMessage}":\n${formatLiveData(userMessage, transformedData)}`;
@@ -249,13 +247,12 @@ async function streamChat(req, res) {
       conv.messages.push({ role: 'assistant', content: liveMessage });
       await user.save();
 
-      // Send live message as a chunk
       res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMessage })}\n\n`);
       res.write(`event: done\ndata:${JSON.stringify({ text: liveMessage, conversationId: conv.conversationId })}\n\n`);
       return res.end();
     }
 
-    // Prepare the contents for AI model
+    // Prepare contents for AI response
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -264,9 +261,7 @@ async function streamChat(req, res) {
       });
     }
 
-    conv.messages.forEach(m =>
-      contents.push({ role: m.role, parts: [{ text: m.content }] })
-    );
+    conv.messages.forEach(m => contents.push({ role: m.role, parts: [{ text: m.content }] }));
 
     // Generate AI response (streaming version)
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -291,7 +286,6 @@ async function streamChat(req, res) {
     res.end();
   }
 }
-
 
 // ─── FILE / IMAGE UPLOAD (SSE) ─────────────────────────────────────────────────
 async function handleUpload(req, res) {

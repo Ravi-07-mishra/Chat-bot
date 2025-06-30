@@ -1,4 +1,3 @@
-// src/pages/Chat.jsx
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
@@ -48,7 +47,7 @@ export default function Chat() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentConversation, setCurrentConversation] = useState({
-    conversationId: null,
+    conversationId: null, // Set to null by default
     messages: [],
   });
   const [conversationSummaries, setConversationSummaries] = useState([]);
@@ -166,10 +165,9 @@ export default function Chat() {
     setError(null);
 
     try {
-      const convo = await sendChatMessage(
-        text,
-        currentConversation.conversationId
-      );
+      // If no active conversation, start a new one, else continue with current one
+      const convoId = currentConversation.conversationId || 'new';
+      const convo = await sendChatMessage(text, convoId);  // Pass the conversationId
       setCurrentConversation(convo);
       await loadConversationSummaries();
     } catch (err) {
@@ -187,9 +185,11 @@ export default function Chat() {
     setLoading(true);
 
     let buffer = "";
+    const convoId = currentConversation.conversationId || 'new';  // Ensure conversationId is passed properly
+
     streamChat({
       message: text,
-      conversationId: currentConversation.conversationId,
+      conversationId: convoId,
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -225,10 +225,12 @@ export default function Chat() {
     setLoading(true);
 
     let buffer = "";
+    const convoId = currentConversation.conversationId || 'new';  // Ensure conversationId is passed properly
+
     uploadFile({
       file,
       text: inputText.trim(),
-      conversationId: currentConversation.conversationId,
+      conversationId: convoId,
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -311,7 +313,7 @@ export default function Chat() {
 
   // ─── New conversation ──────────────────────────────────────────────────────
   const startNew = () => {
-    setCurrentConversation({ conversationId: null, messages: [] });
+    setCurrentConversation({ conversationId: 'new', messages: [] });
     setError(null);
     if (!isMdUp) setMobileOpen(false);
   };
