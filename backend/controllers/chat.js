@@ -126,7 +126,7 @@ async function generateChatCompletion(req, res) {
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
-      news: ['news', 'headlines'],
+      news: ['news', 'headlines','2025'],
       sports: ['sports', 'score', 'game', 'match']
     };
 

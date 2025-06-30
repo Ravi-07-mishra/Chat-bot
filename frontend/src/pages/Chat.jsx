@@ -1,4 +1,3 @@
-// src/pages/Chat.jsx
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
@@ -60,7 +59,6 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  // ─── Speech Synthesis States & Handlers ─────────────────────────────────────
   const [lang, setLang] = useState("en-US");
   const [isPaused, setPaused] = useState(false);
 
@@ -86,7 +84,6 @@ export default function Chat() {
 
     const last = msgs[msgs.length - 1];
     if (last.role === "assistant" && "speechSynthesis" in window) {
-      // cancel any ongoing speech
       window.speechSynthesis.cancel();
       setPaused(false);
 
@@ -96,20 +93,19 @@ export default function Chat() {
     }
   }, [currentConversation.messages, lang]);
 
-  // ─── Redirect if not logged in ──────────────────────────────────────────────
+  // Redirect if not logged in
   useEffect(() => {
     if (!auth?.isLoggedIn) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
-  // ─── Auto‑scroll on new messages or loading ─────────────────────────────────
+  // Auto‑scroll on new messages or loading
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [currentConversation.messages, loading]);
 
-  // ─── Load all conversation summaries ────────────────────────────────────────
+  // Load all conversation summaries
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -123,7 +119,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Load a specific conversation ───────────────────────────────────────────
+  // Load a specific conversation
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
@@ -138,7 +134,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Delete a conversation ─────────────────────────────────────────────────
+  // Delete a conversation
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     setLoadingConversations(true);
@@ -156,7 +152,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Send message (no optimistic UI) ────────────────────────────────────────
+  // Send message (no optimistic UI)
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text) return;
@@ -166,10 +162,10 @@ export default function Chat() {
     setError(null);
 
     try {
-      const convo = await sendChatMessage(
-        text,
-        currentConversation.conversationId
-      );
+      const convo = currentConversation.conversationId
+        ? await sendChatMessage(text, currentConversation.conversationId)
+        : await startNewConversation(text); // Ensure conversationId persists
+
       setCurrentConversation(convo);
       await loadConversationSummaries();
     } catch (err) {
@@ -179,7 +175,7 @@ export default function Chat() {
     }
   };
 
-  // ─── SSE streaming helper ──────────────────────────────────────────────────
+  // SSE streaming helper
   const handleStream = () => {
     const text = inputText.trim();
     if (!text) return;
@@ -189,7 +185,7 @@ export default function Chat() {
     let buffer = "";
     streamChat({
       message: text,
-      conversationId: currentConversation.conversationId,
+      conversationId: currentConversation.conversationId, // Always use the current conversationId
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -218,7 +214,7 @@ export default function Chat() {
     });
   };
 
-  // ─── File upload + streaming ───────────────────────────────────────────────
+  // File upload + streaming
   const handleFileUpload = () => {
     const file = fileInputRef.current.files[0];
     if (!file) return;
@@ -257,7 +253,7 @@ export default function Chat() {
     });
   };
 
-  // ─── Debounced suggestions fetch ───────────────────────────────────────────
+  // Debounced suggestions fetch
   const handleInputChange = (event, value, reason) => {
     setInputText(value || "");
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -276,7 +272,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Web Speech API setup (empty deps to avoid loops) ─────────────────────
+  // Web Speech API setup
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -309,19 +305,27 @@ export default function Chat() {
     }
   };
 
-  // ─── New conversation ──────────────────────────────────────────────────────
-  const startNew = () => {
-    setCurrentConversation({ conversationId: null, messages: [] });
-    setError(null);
-    if (!isMdUp) setMobileOpen(false);
+  // Start a new conversation
+  const startNew = async () => {
+    setLoading(true);
+    try {
+      const newConvo = await createNewConversation(); // Ensure you create a new conversation when needed
+      setCurrentConversation(newConvo);
+      setError(null);
+      if (!isMdUp) setMobileOpen(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ─── Initial load ──────────────────────────────────────────────────────────
+  // Initial load
   useEffect(() => {
     loadConversationSummaries();
   }, []);
 
-  // ─── Sidebar content ───────────────────────────────────────────────────────
+  // Sidebar content
   const sidebarContent = (
     <Box
       sx={{

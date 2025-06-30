@@ -157,7 +157,7 @@ const Chatitem = ({ content, role }) => {
         }}
       >
         {isBot ? (
-          <img src="/gemini_logo.png" alt="bot" width="24" height="24" />
+          <img src="/openai.png" alt="bot" width="24" height="24" />
         ) : (
           auth.user?.name?.[0] || "U"
         )}
