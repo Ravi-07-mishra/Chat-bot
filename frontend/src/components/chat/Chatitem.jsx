@@ -2,6 +2,7 @@ import React, { useCallback, lazy, Suspense } from "react";
 import { Avatar, Box, Typography, Paper, useTheme, useMediaQuery, Link } from "@mui/material";
 import { teal, grey } from "@mui/material/colors";
 import { useAuth } from "../../assets/context/AuthContext";
+import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 // Lazy-load the syntax highlighter
 const SyntaxHighlighter = lazy(() =>
@@ -18,29 +19,66 @@ const Chatitem = ({ content, role }) => {
 
   const formatMessage = useCallback(
     (message) => {
-      // First check for code blocks
+      // First check for code blocks (from working version)
       if (message.includes("```")) {
         const parts = [];
         const segments = message.split("```");
         segments.forEach((seg, i) => {
           if (i % 2 === 0) {
             if (seg.trim()) {
-              parts.push(
-                <Typography
-                  key={`txt-${i}`}
-                  color="white"
-                  sx={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    my: 1,
-                    fontSize: { xs: "0.875rem", sm: "1rem" },
-                  }}
-                >
-                  {seg}
-                </Typography>
-              );
+              // Handle URLs in text segments (new feature)
+              const urlRegex = /(https?:\/\/[^\s]+)/g;
+              if (urlRegex.test(seg)) {
+                const textParts = seg.split(urlRegex);
+                parts.push(
+                  <Typography
+                    key={`txt-${i}`}
+                    color="white"
+                    sx={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      my: 1,
+                      fontSize: { xs: "0.875rem", sm: "1rem" },
+                    }}
+                  >
+                    {textParts.map((part, j) => {
+                      if (part.match(urlRegex)) {
+                        return (
+                          <Link 
+                            key={j} 
+                            href={part} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            color={teal[300]}
+                            sx={{ wordBreak: 'break-all' }}
+                          >
+                            {part}
+                          </Link>
+                        );
+                      }
+                      return part;
+                    })}
+                  </Typography>
+                );
+              } else {
+                parts.push(
+                  <Typography
+                    key={`txt-${i}`}
+                    color="white"
+                    sx={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      my: 1,
+                      fontSize: { xs: "0.875rem", sm: "1rem" },
+                    }}
+                  >
+                    {seg}
+                  </Typography>
+                );
+              }
             }
           } else {
+            // Code block handling (from working version)
             let lang = "javascript";
             let code = seg;
             const firstLine = seg.split("\n")[0].trim();
@@ -82,7 +120,7 @@ const Chatitem = ({ content, role }) => {
         return parts;
       }
 
-      // Handle URLs in the message (for live data links)
+      // Handle URLs in plain messages (new feature)
       const urlRegex = /(https?:\/\/[^\s]+)/g;
       if (urlRegex.test(message)) {
         const parts = message.split(urlRegex);
@@ -118,7 +156,7 @@ const Chatitem = ({ content, role }) => {
         });
       }
 
-      // Default text rendering
+      // Default text rendering (from working version)
       return (
         <Typography
           color="white"
