@@ -47,7 +47,7 @@ export default function Chat() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentConversation, setCurrentConversation] = useState({
-    conversationId: null, // Set to null by default
+    conversationId: null,
     messages: [],
   });
   const [conversationSummaries, setConversationSummaries] = useState([]);
@@ -59,7 +59,7 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  // ─── Speech Synthesis States & Handlers ─────────────────────────────────────
+  // Speech Synthesis States & Handlers
   const [lang, setLang] = useState("en-US");
   const [isPaused, setPaused] = useState(false);
 
@@ -78,37 +78,34 @@ export default function Chat() {
     }
   };
 
-  // 🔊 Speak the latest assistant message
+  // Speak the latest assistant message
   useEffect(() => {
     const msgs = currentConversation.messages;
     if (msgs.length === 0) return;
 
     const last = msgs[msgs.length - 1];
     if (last.role === "assistant" && "speechSynthesis" in window) {
-      // cancel any ongoing speech
       window.speechSynthesis.cancel();
       setPaused(false);
-
       const utterance = new SpeechSynthesisUtterance(last.content);
       utterance.lang = lang;
       window.speechSynthesis.speak(utterance);
     }
   }, [currentConversation.messages, lang]);
 
-  // ─── Redirect if not logged in ──────────────────────────────────────────────
+  // Redirect if not logged in
   useEffect(() => {
     if (!auth?.isLoggedIn) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
-  // ─── Auto‑scroll on new messages or loading ─────────────────────────────────
+  // Auto-scroll on new messages or loading
   useEffect(() => {
     if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop =
-        chatContainerRef.current.scrollHeight;
+      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [currentConversation.messages, loading]);
 
-  // ─── Load all conversation summaries ────────────────────────────────────────
+  // Load all conversation summaries
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -122,7 +119,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Load a specific conversation ───────────────────────────────────────────
+  // Load a specific conversation
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
@@ -137,7 +134,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Delete a conversation ─────────────────────────────────────────────────
+  // Delete a conversation
   const handleDelete = async (id) => {
     if (!window.confirm("Are you sure you want to delete this chat?")) return;
     setLoadingConversations(true);
@@ -155,7 +152,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Send message (no optimistic UI) ────────────────────────────────────────
+  // Send message (restored working version's implementation)
   const handleSubmit = async () => {
     const text = inputText.trim();
     if (!text) return;
@@ -165,9 +162,10 @@ export default function Chat() {
     setError(null);
 
     try {
-      // If no active conversation, start a new one, else continue with current one
-      const convoId = currentConversation.conversationId || 'new';
-      const convo = await sendChatMessage(text, convoId);  // Pass the conversationId
+      const convo = await sendChatMessage(
+        text,
+        currentConversation.conversationId
+      );
       setCurrentConversation(convo);
       await loadConversationSummaries();
     } catch (err) {
@@ -177,7 +175,7 @@ export default function Chat() {
     }
   };
 
-  // ─── SSE streaming helper ──────────────────────────────────────────────────
+  // SSE streaming helper (restored working version's implementation)
   const handleStream = () => {
     const text = inputText.trim();
     if (!text) return;
@@ -185,11 +183,9 @@ export default function Chat() {
     setLoading(true);
 
     let buffer = "";
-    const convoId = currentConversation.conversationId || 'new';  // Ensure conversationId is passed properly
-
     streamChat({
       message: text,
-      conversationId: convoId,
+      conversationId: currentConversation.conversationId,
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -218,19 +214,17 @@ export default function Chat() {
     });
   };
 
-  // ─── File upload + streaming ───────────────────────────────────────────────
+  // File upload + streaming (restored working version's implementation)
   const handleFileUpload = () => {
     const file = fileInputRef.current.files[0];
     if (!file) return;
     setLoading(true);
 
     let buffer = "";
-    const convoId = currentConversation.conversationId || 'new';  // Ensure conversationId is passed properly
-
     uploadFile({
       file,
       text: inputText.trim(),
-      conversationId: convoId,
+      conversationId: currentConversation.conversationId,
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -259,7 +253,7 @@ export default function Chat() {
     });
   };
 
-  // ─── Debounced suggestions fetch ───────────────────────────────────────────
+  // Debounced suggestions fetch
   const handleInputChange = (event, value, reason) => {
     setInputText(value || "");
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -278,7 +272,7 @@ export default function Chat() {
     }
   };
 
-  // ─── Web Speech API setup (empty deps to avoid loops) ─────────────────────
+  // Web Speech API setup
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -311,19 +305,19 @@ export default function Chat() {
     }
   };
 
-  // ─── New conversation ──────────────────────────────────────────────────────
+  // New conversation (restored working version's implementation)
   const startNew = () => {
-    setCurrentConversation({ conversationId: 'new', messages: [] });
+    setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
     if (!isMdUp) setMobileOpen(false);
   };
 
-  // ─── Initial load ──────────────────────────────────────────────────────────
+  // Initial load
   useEffect(() => {
     loadConversationSummaries();
   }, []);
 
-  // ─── Sidebar content ───────────────────────────────────────────────────────
+  // Sidebar content (unchanged)
   const sidebarContent = (
     <Box
       sx={{

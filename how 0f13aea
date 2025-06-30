@@ -1,0 +1,65 @@
+[33m41147be[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m ll
+[33m6f97906[m another udpate of seprate query fix
+[33m1ed89f8[m tired
+[33ma0418c0[m new generatio of conversation for every query fixed
+[33m18df6b8[m chatitem and chat.js changes
+[33mf50f7c3[m google search edit
+[33m0479d56[m google search edit
+[33m4bd61d2[m google search edit
+[33mb419af3[m google search edit
+[33m3b5b822[m google search edit
+[33m8f77859[m chat.js change
+[33m3f9dd94[m Clean up node_modules and update .gitignore
+[33m880b306[m Remove node_modules and update .gitignore
+[33m49ecfbf[m google search
+[33m0f13aea[m toast changes
+[33m3f39e33[m changes
+[33m1a048e6[m changes
+[33m2f209cd[m done
+[33m6fe1fd9[m some changes to backedn
+[33mdbc5174[m some changes
+[33mfc77f5e[m go to chat button added
+[33m1db3213[m api removed
+[33m59cf1d0[m something changed
+[33mcef40af[m ok
+[33m24faa3f[m login change
+[33m91c5b6c[m why
+[33m9105064[m why
+[33md609dcd[m why
+[33m43e4a4e[m why
+[33m5d349a6[m why
+[33m8f3d691[m tired
+[33me62ec52[m tired
+[33m53e8dd6[m why
+[33m5b3023e[m why
+[33m5e1cbc5[m why
+[33m1eb982e[m do
+[33me3ab2b4[m do
+[33m0011701[m do
+[33m0fd7d73[m do
+[33m33b1786[m doen
+[33m7d9932a[m vercel.json
+[33me9dca27[m index.js
+[33mfa122b8[m fix: allow CORS from vercel frontend
+[33m0843326[m env change
+[33mbe5ca3d[m fix: add express-rate-limit
+[33m650e4b2[m fix: add compression middleware
+[33m72e4795[m fix: add helmet to dependencies
+[33m5cf2fc6[m nodemon remove
+[33me746537[m updated
+[33me04a748[m vercel.json
+[33m8a06cbb[m heavy changes
+[33m1eca458[m Reset: This is the new main branch state
+[33m4a1ebdf[m responsive styling
+[33m53a1311[m vercel
+[33md7a6c5b[m vercel.json
+[33mb8e16ef[m package.json
+[33m48ab6f1[m vite changed
+[33m88c7486[m yes
+[33m62f5c21[m model change
+[33mba3e348[m language update
+[33mae6f71c[m previous converstaions, and sidebar for ti
+[33m1a4bf08[m styling update
+[33m8510af6[m styling changed
+[33m7524a97[m gemini update
+[33m9a63e3b[m Initial commit: Added full-stack project with backend and frontend

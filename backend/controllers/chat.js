@@ -22,20 +22,30 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
+// Summarize messages for context
+async function summarizeMessages(memories) {
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const prompt = [
+    { role: 'user', parts: [{ text: 'Summarize these messages succinctly:' }] },
+    ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
+  ];
+  const res = await generateWithRetry(model, { contents: prompt });
+  return res.response.candidates[0].content.parts[0].text || 'Unable to summarize.';
+}
+
 // Transform Google Search API results to Gemini-style response
-// Updated transformToGeminiFormat function
 function transformToGeminiFormat(data) {
   if (!Array.isArray(data)) return [];
   
   return data.map(item => ({
-    role: "system",
+    role: 'system',
     parts: [{
       text: `${item.title || 'No title'}: ${item.snippet || 'No description available'}\nLink: ${item.link || '#'}`
     }]
   }));
 }
 
-// Updated formatLiveData function to return plain text
+// Format live data to plain text
 function formatLiveData(query, data) {
   if (!data || data.length === 0) return 'No results found.';
 
@@ -57,10 +67,7 @@ function formatLiveData(query, data) {
   }).join('\n\n');
 }
 
-// Updated formatLiveData function
-
-
-// Updated fetchLiveData function with better error handling
+// Fetch live data from Google Search API
 async function fetchLiveData(query) {
   try {
     if (!process.env.GOOGLE_API_KEY || !process.env.CUSTOM_SEARCH_ENGINE_ID) {
@@ -83,7 +90,6 @@ async function fetchLiveData(query) {
       return [];
     }
 
-    // Return properly formatted data
     return response.data.items.map(item => ({
       title: item.title,
       snippet: item.snippet,
@@ -96,7 +102,6 @@ async function fetchLiveData(query) {
 }
 
 // Main chat completion function
-// generateChatCompletion function
 async function generateChatCompletion(req, res) {
   try {
     const { message, conversationId } = req.body;
@@ -108,20 +113,23 @@ async function generateChatCompletion(req, res) {
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // Ensure conversation exists or create a new one
-    let conv = conversationId ? user.conversations.id(conversationId) : null;
+    // Find or create conversation (using working version logic)
+    let conv = conversationId
+      ? user.conversations.find((c) => c.conversationId === conversationId)
+      : null;
     if (!conv) {
       conv = user.conversations.create({
-        conversationId: randomUUID(), // Create a new conversationId if not passed
+        conversationId: randomUUID(),
         messages: [],
+        summary: '',
       });
-      user.conversations.push(conv); // Add new conversation to user's conversations
+      user.conversations.push(conv);
     }
 
-    // Add user message to the conversation
+    // Add user message to conversation
     conv.messages.push({ role: 'user', content: userMessage });
 
-    // Handle live data queries
+    // Handle live data queries (from new version)
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -150,10 +158,10 @@ async function generateChatCompletion(req, res) {
       return res.json({ conversation: conv });
     }
 
-    // Summarize conversation if it exceeds a certain length
+    // Summarize conversation if it exceeds a certain length (from working version)
     if (conv.messages.length > 20) {
       const old = conv.messages.splice(0, 10);
-      const summary = await summarizeMessages(old); // Assuming summarizeMessages function exists
+      const summary = await summarizeMessages(old);
       conv.summary = (conv.summary || '') + '\n' + summary;
     }
 
@@ -182,11 +190,12 @@ async function generateChatCompletion(req, res) {
     return res.json({ conversation: conv });
   } catch (err) {
     console.error('Chat error:', err);
-    return res.status(500).json({ message: err.message || 'Internal error' });
+    const status = err.status === 429 ? 503 : 500;
+    return res.status(status).json({ message: err.message || 'Internal error' });
   }
 }
 
-// Stream Chat function (for SSE)
+// Stream Chat function (for SSE) - Updated with working version logic
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -210,12 +219,15 @@ async function streamChat(req, res) {
       return res.end();
     }
 
-    // Find or create the conversation
-    let conv = conversationId ? user.conversations.id(conversationId) : null;
+    // Find or create conversation (using working version logic)
+    let conv = conversationId
+      ? user.conversations.find((c) => c.conversationId === conversationId)
+      : null;
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
         messages: [],
+        summary: '',
       });
       user.conversations.push(conv);
     }
@@ -224,7 +236,7 @@ async function streamChat(req, res) {
     conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
-    // Handle live data queries
+    // Handle live data queries (from new version)
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -252,7 +264,7 @@ async function streamChat(req, res) {
       return res.end();
     }
 
-    // Prepare contents for AI response
+    // Prepare contents for AI response (from working version)
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -287,67 +299,61 @@ async function streamChat(req, res) {
   }
 }
 
-// ─── FILE / IMAGE UPLOAD (SSE) ─────────────────────────────────────────────────
+// File/Image Upload (SSE) - Using working version
 async function handleUpload(req, res) {
   let mimeType, imageBase64;
 
   if (req.file) {
     mimeType = req.file.mimetype;
-    imageBase64 = fs.readFileSync(req.file.path, { encoding: "base64" });
+    imageBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
   } else if (req.body.imageBase64) {
     imageBase64 = req.body.imageBase64;
-    mimeType = req.body.mimeType || "image/jpeg";
+    mimeType = req.body.mimeType || 'image/jpeg';
   } else {
-    return res.status(400).json({ message: "Image (file or base64) required" });
+    return res.status(400).json({ message: 'Image (file or base64) required' });
   }
 
-  const userMessage = (req.body.message || "Please describe this image.").trim();
+  const userMessage = (req.body.message || 'Please describe this image.').trim();
 
   res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
   });
-  res.write("\n");
+  res.write('\n');
 
   try {
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
-      res.write(
-        `event: error\ndata:${JSON.stringify({
-          error: "Invalid user",
-        })}\n\n`
-      );
+      res.write(`event: error\ndata:${JSON.stringify({ error: 'Invalid user' })}\n\n`);
       return res.end();
     }
 
     let conv = req.body.conversationId
-      ? user.conversations.find(
-          (c) => c.conversationId === req.body.conversationId
-        )
+      ? user.conversations.find(c => c.conversationId === req.body.conversationId)
       : null;
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
         messages: [],
-        summary: "",
+        summary: '',
       });
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ role: "user", content: userMessage });
+    conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
     const contents = [
       ...(conv.summary
-        ? [{ role: "system", parts: [{ text: `Summary:\n${conv.summary}` }] }]
+        ? [{ role: 'system', parts: [{ text: `Summary:\n${conv.summary}` }] }]
         : []),
-      ...conv.messages.map((m) => ({
+      ...conv.messages.map(m => ({
         role: m.role,
         parts: [{ text: m.content }],
       })),
       {
-        role: "user",
+        role: 'user',
         parts: [
           {
             inlineData: {
@@ -359,35 +365,32 @@ async function handleUpload(req, res) {
       },
     ];
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const stream = await model.generateContentStream({ contents });
 
-    let buffer = "";
+    let buffer = '';
     for await (const chunk of stream.stream) {
-      const part = chunk.text() || "";
+      const part = chunk.text() || '';
       buffer += part;
       res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
     }
 
     const finalText = buffer.trim();
-    conv.messages.push({ role: "assistant", content: finalText });
+    conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
-    res.write(
-      `event: done\ndata:${JSON.stringify({
-        text: finalText,
-        conversationId: conv.conversationId,
-      })}\n\n`
-    );
+    res.write(`event: done\ndata:${JSON.stringify({
+      text: finalText,
+      conversationId: conv.conversationId,
+    })}\n\n`);
     res.end();
   } catch (err) {
-    console.error("handleUpload error:", err);
-    res.write(
-      `event: error\ndata:${JSON.stringify({ error: err.message })}\n\n`
-    );
+    console.error('handleUpload error:', err);
+    res.write(`event: error\ndata:${JSON.stringify({ error: err.message })}\n\n`);
     res.end();
   }
 }
+
 
 // ─── DELETE CONVERSATION ───────────────────────────────────────────────────
 async function deleteConversation(req, res) {

@@ -6,7 +6,6 @@ export const signupUser = async (name, email, password) => {
   if (![200, 201].includes(res.status)) {
     throw new Error("Signup failed");
   }
-  // Server sets auth_token cookie; no localStorage needed
   return res.data;
 };
 
@@ -15,7 +14,6 @@ export const loginUser = async (email, password) => {
   if (![200, 201].includes(res.status)) {
     throw new Error("Login failed");
   }
-  // Server sets auth_token cookie
   return res.data;
 };
 
@@ -32,7 +30,6 @@ export const checkAuthStatus = async () => {
 };
 
 // ─── CHATS ────────────────────────────────────────────────────────────────────
-
 export const getConversations = async () => {
   const res = await api.get("/chat/conversations");
   return res.data.conversations;
@@ -43,43 +40,16 @@ export const getConversationById = async (id) => {
   return res.data.conversation;
 };
 
-// Create or get an existing conversation
-export const getOrCreateConversation = async (conversationId = null) => {
-  if (conversationId) {
-    // If conversationId is passed, return the existing conversation
-    try {
-      const conversation = await getConversationById(conversationId);
-      return conversation;
-    } catch (error) {
-      throw new Error("Conversation not found");
-    }
-  } else {
-    // Create a new conversation if no conversationId is passed
-    try {
-      const res = await api.post("/chat/new"); // Assuming your API has a POST route for creating a new conversation
-      return res.data.conversationId;
-    } catch (error) {
-      throw new Error("Failed to create a new conversation.");
-    }
-  }
-};
-
-// Send a message to an existing or new conversation
+// Combined version with proper conversation handling
 export const sendChatMessage = async (message, conversationId = null) => {
-  try {
-    if (!conversationId) {
-      // Create a new conversation if no conversationId is passed
-      conversationId = await getOrCreateConversation();
-    }
-    const res = await api.post("/chat/new", { message, conversationId });
-    return res.data.conversation;
-  } catch (error) {
-    throw new Error("Failed to send message.");
-  }
+  const res = await api.post("/chat/new", { 
+    message, 
+    conversationId 
+  });
+  return res.data.conversation;
 };
 
 // ─── SSE STREAM ───────────────────────────────────────────────────────────────
-
 function parseSSE(buffer, onChunk, onDone) {
   const blocks = buffer.split("\n\n");
   blocks.slice(0, -1).forEach((block) => {
@@ -91,18 +61,14 @@ function parseSSE(buffer, onChunk, onDone) {
       if (parsed.part) onChunk(parsed.part);
       else if (parsed.text) onDone(parsed.text);
     } catch {
-      // ignore non-JSON lines like "event: chunk"
+      // ignore non-JSON lines
     }
   });
-  return blocks[blocks.length - 1]; // leftover
+  return blocks[blocks.length - 1];
 }
 
 export function streamChat({ message, conversationId, onChunk, onDone, onError }) {
-  // Ensure that conversationId is passed for streaming
-  if (!conversationId) {
-    throw new Error("Conversation ID is required for streaming.");
-  }
-
+  // Restored working version's simpler implementation
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -131,13 +97,7 @@ export function streamChat({ message, conversationId, onChunk, onDone, onError }
 }
 
 // ─── UPLOAD + SSE ─────────────────────────────────────────────────────────────
-
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
-  // Ensure conversationId is passed
-  if (!conversationId) {
-    throw new Error("Conversation ID is required for file upload.");
-  }
-
   const reader = new FileReader();
 
   reader.onload = () => {
@@ -147,7 +107,11 @@ export function uploadFile({ file, text = "", conversationId, onChunk, onDone, o
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       mode: "cors",
-      body: JSON.stringify({ imageBase64: base64, message: text, conversationId }),
+      body: JSON.stringify({ 
+        imageBase64: base64, 
+        message: text, 
+        conversationId 
+      }),
     })
       .then((res) => {
         if (!res.ok) throw new Error("Upload failed");
@@ -174,7 +138,6 @@ export function uploadFile({ file, text = "", conversationId, onChunk, onDone, o
 }
 
 // ─── MISC ────────────────────────────────────────────────────────────────────
-
 export const deleteConversation = async (id) => {
   const res = await api.delete(`/chat/conversations/${id}`);
   if (res.status !== 200) throw new Error("Deletion failed");
