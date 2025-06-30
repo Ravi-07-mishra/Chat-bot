@@ -1,5 +1,5 @@
 import React, { useCallback, lazy, Suspense } from "react";
-import { Avatar, Box, Typography, Paper, useTheme, useMediaQuery } from "@mui/material";
+import { Avatar, Box, Typography, Paper, useTheme, useMediaQuery, Link } from "@mui/material";
 import { teal, grey } from "@mui/material/colors";
 import { useAuth } from "../../assets/context/AuthContext";
 
@@ -9,7 +9,6 @@ const SyntaxHighlighter = lazy(() =>
     default: mod.Prism,
   }))
 );
-import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const Chatitem = ({ content, role }) => {
   const auth = useAuth();
@@ -19,6 +18,7 @@ const Chatitem = ({ content, role }) => {
 
   const formatMessage = useCallback(
     (message) => {
+      // First check for code blocks
       if (message.includes("```")) {
         const parts = [];
         const segments = message.split("```");
@@ -82,7 +82,43 @@ const Chatitem = ({ content, role }) => {
         return parts;
       }
 
-      // If the message is not a code block, handle it as regular text or HTML
+      // Handle URLs in the message (for live data links)
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      if (urlRegex.test(message)) {
+        const parts = message.split(urlRegex);
+        return parts.map((part, i) => {
+          if (part.match(urlRegex)) {
+            return (
+              <Link 
+                key={i} 
+                href={part} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                color={teal[300]}
+                sx={{ wordBreak: 'break-all' }}
+              >
+                {part}
+              </Link>
+            );
+          }
+          return (
+            <Typography
+              key={i}
+              component="span"
+              color="white"
+              sx={{
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+                fontSize: { xs: "0.875rem", sm: "1rem" },
+              }}
+            >
+              {part}
+            </Typography>
+          );
+        });
+      }
+
+      // Default text rendering
       return (
         <Typography
           color="white"

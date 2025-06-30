@@ -22,38 +22,50 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
-// Transform Google search results into Gemini-friendly format
+// Transform Google Search API results to Gemini-style response
+// Updated transformToGeminiFormat function
 function transformToGeminiFormat(data) {
+  if (!Array.isArray(data)) return [];
+  
   return data.map(item => ({
     role: "system",
-    parts: [{ text: `${item.title}: ${item.snippet}\nLink: ${item.link}` }]
+    parts: [{
+      text: `${item.title || 'No title'}: ${item.snippet || 'No description available'}\nLink: ${item.link || '#'}`
+    }]
   }));
 }
 
-// Format live data as rich text
+// Updated formatLiveData function to return plain text
 function formatLiveData(query, data) {
   if (!data || data.length === 0) return 'No results found.';
-  
+
   return data.map(item => {
-    const parts = item.parts[0].text.split('\n');
-    const title = parts[0].replace(': ', '');
-    const snippet = parts.slice(1, -1).join('\n');
-    const link = parts[parts.length - 1].replace('Link: ', '');
+    let title, snippet, link;
     
-    return `<div style="margin-bottom:15px;padding-left:10px;border-left:3px solid #26a69a;">
-      <a href="${link}" target="_blank" style="color:#26a69a;font-weight:bold;text-decoration:none;">
-        ${title}
-      </a>
-      <p style="color:#e0e0e0;margin-top:5px;">${snippet}</p>
-    </div>`;
-  }).join('');
+    if (item.parts && item.parts[0] && item.parts[0].text) {
+      const parts = item.parts[0].text.split('\n');
+      title = parts[0].split(':')[0] || 'No title';
+      snippet = parts[0].split(':').slice(1).join(':').trim() || 'No description available';
+      link = parts.length > 1 ? parts[parts.length - 1].replace('Link: ', '') : '#';
+    } else {
+      title = item.title || 'No title';
+      snippet = item.snippet || 'No description available';
+      link = item.link || '#';
+    }
+
+    return `${title}\n${snippet}\n${link}`;
+  }).join('\n\n');
 }
 
-// Fetch live data from Google (with improved error handling)
+// Updated formatLiveData function
+
+
+// Updated fetchLiveData function with better error handling
 async function fetchLiveData(query) {
   try {
     if (!process.env.GOOGLE_API_KEY || !process.env.CUSTOM_SEARCH_ENGINE_ID) {
-      throw new Error('API configuration missing');
+      console.warn('Google API configuration missing');
+      return [];
     }
 
     const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
@@ -66,12 +78,17 @@ async function fetchLiveData(query) {
       timeout: 5000
     });
 
-    if (!response.data?.items || !Array.isArray(response.data.items)) {
-      console.warn('No items array in response');
+    if (!response.data?.items) {
+      console.warn('No items in Google search response');
       return [];
     }
 
-    return response.data.items;
+    // Return properly formatted data
+    return response.data.items.map(item => ({
+      title: item.title,
+      snippet: item.snippet,
+      link: item.link
+    }));
   } catch (error) {
     console.error('Search error:', error.message);
     return [];
@@ -91,10 +108,7 @@ async function generateChatCompletion(req, res) {
     if (!user) return res.status(401).json({ message: 'User not found' });
 
     // Create or load conversation
-    let conv = conversationId
-      ? user.conversations.id(conversationId)
-      : null;
-
+    let conv = conversationId ? user.conversations.id(conversationId) : null;
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
@@ -107,7 +121,8 @@ async function generateChatCompletion(req, res) {
     // Add user message to conversation
     conv.messages.push({ role: 'user', content: userMessage });
 
-    // Handle live data queries
+    // Handle live data queries (Google search data)
+     // Handle live data queries
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -124,26 +139,29 @@ async function generateChatCompletion(req, res) {
 
     // If live data found, create assistant message
     if (liveData.length > 0) {
-      const formattedData = formatLiveData(userMessage, liveData);
-      
-      // Add live data as assistant message
+      const transformedData = transformToGeminiFormat(liveData);
+      const formattedData = formatLiveData(userMessage, transformedData);
+
+      // Add as normal assistant message (no special formatting)
       conv.messages.push({
         role: 'assistant',
-        content: `🔍 Live results for "${userMessage}":\n${formattedData}`
+        content: `I found these results for "${userMessage}":\n${formattedData}`
       });
 
       await user.save();
       return res.json({ conversation: conv });
     }
+      
 
-    // Summarize if needed
+   
+    // Summarize conversation if needed
     if (conv.messages.length > 20) {
       const old = conv.messages.splice(0, 10);
-      const summary = await summarizeMessages(old);
+      const summary = await summarizeMessages(old); // Assuming you have a summarizeMessages function
       conv.summary = (conv.summary || '') + '\n' + summary;
     }
 
-    // Generate AI response
+    // Generate AI response using Google Gemini model
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -151,21 +169,18 @@ async function generateChatCompletion(req, res) {
         parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
-    
-    conv.messages.forEach(m => 
+
+    conv.messages.forEach(m =>
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-    const result = await generateWithRetry(model, {
-      contents,
-      tool_config: { function_calling_config: { mode: 'AUTO' } },
-    });
+    const result = await generateWithRetry(model, { contents });
 
     const candidate = result.response.candidates[0];
     const botText = candidate.content?.parts?.[0]?.text || '';
 
-    // Add AI response
+    // Add AI response to conversation
     conv.messages.push({ role: 'assistant', content: botText });
     await user.save();
 
@@ -176,7 +191,7 @@ async function generateChatCompletion(req, res) {
   }
 }
 
-// SSE streaming function
+// SSE streaming function (for live streaming of messages)
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -188,23 +203,19 @@ async function streamChat(req, res) {
   try {
     const { message, conversationId } = req.body;
     const userMessage = message?.trim();
-    
+
     if (!userMessage) {
-      res.write(`event: error\ndata:${JSON.stringify({error: 'Message required'})}\n\n`);
+      res.write(`event: error\ndata:${JSON.stringify({ error: 'Message required' })}\n\n`);
       return res.end();
     }
 
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
-      res.write(`event: error\ndata:${JSON.stringify({error: 'Invalid user'})}\n\n`);
+      res.write(`event: error\ndata:${JSON.stringify({ error: 'Invalid user' })}\n\n`);
       return res.end();
     }
 
-    // Create or load conversation
-    let conv = conversationId
-      ? user.conversations.id(conversationId)
-      : null;
-
+    let conv = conversationId ? user.conversations.id(conversationId) : null;
     if (!conv) {
       conv = user.conversations.create({
         conversationId: randomUUID(),
@@ -214,11 +225,10 @@ async function streamChat(req, res) {
       user.conversations.push(conv);
     }
 
-    // Add user message
     conv.messages.push({ role: 'user', content: userMessage });
     await user.save();
 
-    // Handle live data queries
+    // Handle live data queries (Google search data)
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -235,23 +245,19 @@ async function streamChat(req, res) {
 
     // If live data found, send as assistant message
     if (liveData.length > 0) {
-      const formattedData = formatLiveData(userMessage, liveData);
-      const liveMessage = `🔍 Live results for "${userMessage}":\n${formattedData}`;
-      
-      // Add to conversation
-      conv.messages.push({ role: 'assistant', content: liveMessage });
-      await user.save();
+    const transformedData = transformToGeminiFormat(liveData);
+    const liveMessage = `I found these results for "${userMessage}":\n${formatLiveData(userMessage, transformedData)}`;
 
-      // Send as SSE event
-      res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMessage })}\n\n`);
-      res.write(`event: done\ndata:${JSON.stringify({
-        text: liveMessage,
-        conversationId: conv.conversationId
-      })}\n\n`);
-      return res.end();
-    }
+    conv.messages.push({ role: 'assistant', content: liveMessage });
+    await user.save();
 
-    // Generate AI response
+    // Send as normal SSE event
+    res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMessage })}\n\n`);
+    res.write(`event: done\ndata:${JSON.stringify({ text: liveMessage, conversationId: conv.conversationId })}\n\n`);
+    return res.end();
+  }
+
+    // Generate AI response (streaming version)
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -259,8 +265,8 @@ async function streamChat(req, res) {
         parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
-    
-    conv.messages.forEach(m => 
+
+    conv.messages.forEach(m =>
       contents.push({ role: m.role, parts: [{ text: m.content }] })
     );
 
@@ -274,24 +280,19 @@ async function streamChat(req, res) {
       res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
     }
 
-    // Add final response to conversation
     const finalText = buffer.trim();
     conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
-    res.write(`event: done\ndata:${JSON.stringify({
-      text: finalText,
-      conversationId: conv.conversationId
-    })}\n\n`);
+    res.write(`event: done\ndata:${JSON.stringify({ text: finalText, conversationId: conv.conversationId })}\n\n`);
     res.end();
   } catch (err) {
     console.error('Stream error:', err);
-    res.write(`event: error\ndata:${JSON.stringify({
-      error: err.message || 'Stream failed'
-    })}\n\n`);
+    res.write(`event: error\ndata:${JSON.stringify({ error: err.message || 'Stream failed' })}\n\n`);
     res.end();
   }
 }
+
 
 // ─── FILE / IMAGE UPLOAD (SSE) ─────────────────────────────────────────────────
 async function handleUpload(req, res) {
