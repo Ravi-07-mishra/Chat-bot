@@ -1,10 +1,10 @@
 const express = require("express");
 const { 
-  getAllusers, 
+  getAllUsers, 
   userSignup, 
   userLogin, 
   verifyUser, 
-  logoutuser 
+  logoutUser 
 } = require("../controllers/user");
 const { validate, signupValidator, loginValidator } = require("../utils/validators");
 const { verifyToken } = require("../utils/token-manager");
@@ -12,12 +12,12 @@ const { verifyToken } = require("../utils/token-manager");
 const userRoutes = express.Router();
 
 // GET all users (admin/debug)
-userRoutes.get("/", getAllusers);
+userRoutes.get("/", getAllUsers);
 
 // User authentication
 userRoutes.post("/register", validate(signupValidator), userSignup);
 userRoutes.post("/login", validate(loginValidator), userLogin);
 userRoutes.get("/verify", verifyToken, verifyUser);
-userRoutes.post("/logout", logoutuser);
+userRoutes.post("/logout", logoutUser);
 
 module.exports = userRoutes;
