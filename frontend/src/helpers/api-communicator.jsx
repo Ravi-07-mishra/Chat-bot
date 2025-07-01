@@ -1,5 +1,9 @@
 import api from "../api";
-
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(';').shift();
+}
 export const signupUser = async (name, email, password) => {
   try {
     const res = await api.post("/user/signup", { name, email, password });
@@ -66,33 +70,34 @@ function parseSSE(buffer, onChunk, onDone) {
 }
 
 export function streamChat({ message, conversationId, image, onChunk, onDone, onError }) {
-  // Ensure we have a valid message or image
-  if (!message && !image) {
+  // Validate payload
+  if (!message?.trim() && !image) {
     onError("Message or image is required");
     return;
   }
+
+  // Get token explicitly
+  const token = getCookie('bot_token');
 
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
+      "Authorization": token ? `Bearer ${token}` : ""
     },
-    credentials: "include", // Essential for cookies
+    credentials: "include",
     body: JSON.stringify({ 
       message: message || "", 
       conversationId,
       image: image || null 
     }),
   }).then((res) => {
-    if (!res.ok) {
-      // Handle specific error statuses
-      if (res.status === 401) {
-        window.dispatchEvent(new Event("unauthorized"));
-      }
-      throw new Error(`Request failed with status ${res.status}`);
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent("unauthorized"));
+      throw new Error("Unauthorized");
     }
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
     
-    // Handle streaming response
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
@@ -122,11 +127,12 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
     
     read();
   }).catch(err => {
-    console.error("Stream error:", err);
+    if (err.message.includes("401")) {
+      window.dispatchEvent(new CustomEvent("unauthorized"));
+    }
     onError(err.message);
   });
 }
-
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
   const reader = new FileReader();
 

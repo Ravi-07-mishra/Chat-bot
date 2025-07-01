@@ -19,13 +19,15 @@ export const AuthProvider = ({ children }) => {
       setUser({ email: data.email, name: data.name });
       setIsLoggedIn(true);
     } catch (error) {
-    if (error.message === "Not authenticated" || error.response?.status === 401) {
-      setIsLoggedIn(false);
-      // Force cookie cleanup
-      document.cookie = 'bot_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    }
-    console.error("Auth error:", error);
-  } finally {
+      if (error.message === "Not authenticated" || error.response?.status === 401) {
+        setIsLoggedIn(false);
+        // Clear all auth cookies
+        ['bot_token', 'auth_token'].forEach(name => {
+          document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
+        });
+      }
+      console.error("Auth error:", error);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -73,6 +75,12 @@ export const AuthProvider = ({ children }) => {
       await api.post("/user/logout");
       setUser(null);
       setIsLoggedIn(false);
+      
+      // Clear all auth cookies
+      ['bot_token', 'auth_token'].forEach(name => {
+        document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
+      });
+      
       navigate("/login", { replace: true });
     } catch (err) {
       console.error("Logout error:", err);
