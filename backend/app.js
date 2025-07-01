@@ -8,7 +8,7 @@ const compression = require("compression");
 const rateLimit = require("express-rate-limit");
 const appRouter = require("./routes");
 
-// Load environment variables - should be first
+// Load environment variables
 dotenv.config();
 
 // Validate essential environment variables
@@ -16,7 +16,7 @@ const requiredEnvVars = [
   'JWT_SECRET',
   'COOKIE_SECRET', 
   'MONGO_URI',
-  'NODE_ENV' // Added this as required
+  'NODE_ENV'
 ];
 
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
@@ -32,17 +32,44 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"], // Adjust as needed
+      scriptSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
       styleSrc: ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
       imgSrc: ["'self'", "data:", "blob:"],
       connectSrc: ["'self'", process.env.VITE_API_URL || 'http://localhost:5173']
     }
   },
-  crossOriginResourcePolicy: { policy: "cross-origin" } // Needed for Vercel
+  crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 
-// Trust first proxy (for secure cookies behind proxies)
+// Trust first proxy
 app.set("trust proxy", 1);
+
+// Enhanced CORS Configuration - MOVED BEFORE OTHER MIDDLEWARE
+const allowedOrigins = [
+  /\.vercel\.app$/,
+  process.env.FRONTEND_URL,
+  'http://localhost:5173'
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    
+    const isAllowed = allowedOrigins.some(allowed => 
+      typeof allowed === 'string' 
+        ? origin === allowed 
+        : allowed.test(origin)
+    );
+    
+    isAllowed 
+      ? callback(null, true) 
+      : callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+  exposedHeaders: ['set-cookie'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 // Other middleware
 app.use(compression());
@@ -55,47 +82,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate Limiting - more production-appropriate settings
+// Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Different limits
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000,
   message: "Too many requests, please try again later.",
   standardHeaders: true,
   legacyHeaders: false
 });
 app.use("/api", limiter);
 
-// Enhanced CORS Configuration
-const allowedOrigins = [
-  /\.vercel\.app$/, // All Vercel deployments
-  process.env.FRONTEND_URL, // Your production frontend
-  'http://localhost:5173' // Local development
-].filter(Boolean);
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // Allow server-to-server
-    
-    if (
-      allowedOrigins.some(allowed => 
-        typeof allowed === 'string' 
-          ? origin === allowed 
-          : allowed.test(origin)
-      )
-    ) {
-      return callback(null, true);
-    }
-    
-    console.warn('CORS Blocked for origin:', origin);
-    callback(new Error("Not allowed by CORS"));
-  },
-  credentials: true,
-  exposedHeaders: ['set-cookie'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
-
-// API Routes under /api/v1
+// API Routes
 app.use("/api/v1", appRouter);
 
 // Health check endpoint
@@ -116,7 +113,7 @@ app.use((req, res) => {
   });
 });
 
-// Enhanced Error Handler
+// Error Handler
 app.use((err, req, res, next) => {
   console.error("🔥 Error:", {
     message: err.message,
