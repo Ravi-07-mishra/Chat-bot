@@ -3,43 +3,54 @@ const { body, validationResult } = require("express-validator");
 // Validate function
 const validate = (validations) => {
   return async (req, res, next) => {
-    // Run validations
-    await Promise.all(validations.map((validation) => validation.run(req)));
-
-    // Get validation errors
+    await Promise.all(validations.map(validation => validation.run(req)));
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log("Validation Error:", errors.array()); // Add this line
       return res.status(422).json({ errors: errors.array() });
     }
-
-    // Proceed to the next middleware if no errors
+    
     next();
   };
 };
-const LoginValidator = [
+
+// Validators
+const loginValidator = [
   body("email").trim().isEmail().withMessage("Invalid email format"),
   body("password")
     .trim()
     .isLength({ min: 6 })
     .withMessage("Should contain at least 6 characters"),
 ];
-// Signup validator
+
 const signupValidator = [
   body("name").notEmpty().withMessage("Name is required"),
-  ...LoginValidator,
+  ...loginValidator,
 ];
+
 const chatCompletionValidator = [
   body("message").notEmpty().withMessage("Message is required"),
+  body("conversationId").optional().isString(),
+  body("image").optional().isString()
 ];
+
 const streamChatValidator = [
   body("message").notEmpty().withMessage("Message is required"),
+  body("conversationId").optional().isString(),
+  body("image").optional().isString()
+];
+
+const uploadValidator = [
+  body("imageBase64").notEmpty().withMessage("Image is required"),
+  body("message").optional().isString(),
+  body("conversationId").optional().isString()
 ];
 
 module.exports = {
   validate,
-  streamChatValidator,
   signupValidator,
-  LoginValidator,
+  loginValidator,
   chatCompletionValidator,
+  streamChatValidator,
+  uploadValidator
 };

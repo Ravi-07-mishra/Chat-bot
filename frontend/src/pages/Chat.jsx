@@ -15,10 +15,17 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-import { red, teal } from "@mui/material/colors";
-import { MdSend, MdMic, MdUploadFile, MdMenu, MdPause, MdPlayArrow } from "react-icons/md";
+import { red, teal, grey } from "@mui/material/colors";
+import { 
+  MdSend, MdMic, MdUploadFile, MdMenu, 
+  MdPause, MdPlayArrow, MdClose
+} from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -58,6 +65,7 @@ export default function Chat() {
   const [error, setError] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
+  const [image, setImage] = useState(null); // Store selected image
 
   // Speech Synthesis States & Handlers
   const [lang, setLang] = useState("en-US");
@@ -152,35 +160,96 @@ export default function Chat() {
     }
   };
 
-  // Send message (restored working version's implementation)
+  // Handle file selection
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.match('image.*')) {
+      setError('Please select an image file');
+      return;
+    }
+    
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size should be less than 5MB');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImage(reader.result); // Store base64 image
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Clear selected image
+  const clearImage = () => {
+    setImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Send message (supports text and images)
   const handleSubmit = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text && !image) return;
 
     setInputText("");
     setLoading(true);
     setError(null);
 
     try {
-      const convo = await sendChatMessage(
-        text,
-        currentConversation.conversationId
-      );
+      // Add user message optimistically
+      const userMessage = {
+        role: 'user',
+        content: text,
+        image: image || null
+      };
+      
+      setCurrentConversation(c => ({
+        ...c,
+        messages: [...c.messages, userMessage]
+      }));
+      
+      // Send to backend
+      const convo = await sendChatMessage({
+        message: text,
+        conversationId: currentConversation.conversationId,
+        image: image
+      });
+      
+      // Update with server response
       setCurrentConversation(convo);
       await loadConversationSummaries();
+      
+      // Clear image after successful send
+      clearImage();
     } catch (err) {
       setError(err.message);
+      // Remove optimistic message on error
+      setCurrentConversation(c => ({
+        ...c,
+        messages: c.messages.slice(0, -1)
+      }));
     } finally {
       setLoading(false);
     }
   };
 
-  // SSE streaming helper (restored working version's implementation)
+  // SSE streaming for text messages
   const handleStream = () => {
     const text = inputText.trim();
     if (!text) return;
     setInputText("");
     setLoading(true);
+    setError(null);
+
+    // Add user message optimistically
+    setCurrentConversation(c => ({
+      ...c,
+      messages: [...c.messages, { role: 'user', content: text }]
+    }));
 
     let buffer = "";
     streamChat({
@@ -191,38 +260,55 @@ export default function Chat() {
         setCurrentConversation((c) => ({
           ...c,
           messages: [
-            ...c.messages.filter((m) => m.role !== "assistant-stream"),
-            { role: "assistant-stream", content: buffer },
-          ],
+            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
+            { role: 'assistant-stream', content: buffer }
+          ]
         }));
       },
-      onDone: (full) => {
+      onDone: (full, conversationId) => {
         setCurrentConversation((c) => ({
-          ...c,
+          conversationId: conversationId || c.conversationId,
           messages: [
-            ...c.messages.filter((m) => m.role !== "assistant-stream"),
-            { role: "assistant", content: full },
-          ],
+            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
+            { role: 'assistant', content: full }
+          ]
         }));
         loadConversationSummaries();
         setLoading(false);
       },
       onError: (err) => {
-        setError(err.message);
+        setError(err);
         setLoading(false);
+        // Remove optimistic messages on error
+        setCurrentConversation(c => ({
+          ...c,
+          messages: c.messages.slice(0, -1)
+        }));
       },
     });
   };
 
-  // File upload + streaming (restored working version's implementation)
+  // Handle file upload with streaming
   const handleFileUpload = () => {
-    const file = fileInputRef.current.files[0];
-    if (!file) return;
+    if (!image) return;
     setLoading(true);
+    setError(null);
+
+    // Add user message optimistically
+    const userMessage = {
+      role: 'user',
+      content: inputText.trim(),
+      image: image
+    };
+    
+    setCurrentConversation(c => ({
+      ...c,
+      messages: [...c.messages, userMessage]
+    }));
 
     let buffer = "";
     uploadFile({
-      file,
+      file: image,
       text: inputText.trim(),
       conversationId: currentConversation.conversationId,
       onChunk: (part) => {
@@ -230,25 +316,32 @@ export default function Chat() {
         setCurrentConversation((c) => ({
           ...c,
           messages: [
-            ...c.messages.filter((m) => m.role !== "assistant-stream"),
-            { role: "assistant-stream", content: buffer },
-          ],
+            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
+            { role: 'assistant-stream', content: buffer }
+          ]
         }));
       },
-      onDone: (full) => {
+      onDone: (full, conversationId) => {
         setCurrentConversation((c) => ({
-          ...c,
+          conversationId: conversationId || c.conversationId,
           messages: [
-            ...c.messages.filter((m) => m.role !== "assistant-stream"),
-            { role: "assistant", content: full },
-          ],
+            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
+            { role: 'assistant', content: full }
+          ]
         }));
         loadConversationSummaries();
         setLoading(false);
+        clearImage();
       },
       onError: (err) => {
-        setError(err.message);
+        setError(err);
         setLoading(false);
+        clearImage();
+        // Remove optimistic messages on error
+        setCurrentConversation(c => ({
+          ...c,
+          messages: c.messages.slice(0, -1)
+        }));
       },
     });
   };
@@ -305,10 +398,11 @@ export default function Chat() {
     }
   };
 
-  // New conversation (restored working version's implementation)
+  // Start new conversation
   const startNew = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
+    setImage(null);
     if (!isMdUp) setMobileOpen(false);
   };
 
@@ -317,7 +411,7 @@ export default function Chat() {
     loadConversationSummaries();
   }, []);
 
-  // Sidebar content (unchanged)
+  // Sidebar content
   const sidebarContent = (
     <Box
       sx={{
@@ -346,74 +440,81 @@ export default function Chat() {
       </Button>
 
       {loadingConversations ? (
-        <CircularProgress size={24} sx={{ color: "white" }} />
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <CircularProgress size={24} sx={{ color: "white" }} />
+        </Box>
       ) : conversationSummaries.length === 0 ? (
-        <Typography color="white">No conversations found</Typography>
+        <Typography color="white" textAlign="center">
+          No conversations found
+        </Typography>
       ) : (
-        conversationSummaries.map((s) => {
-          const isActive =
-            s.conversationId === currentConversation.conversationId;
-          return (
-            <Box
-              key={s.conversationId}
-              onClick={() => loadConversation(s.conversationId)}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                p: 2,
-                mb: 1.5,
-                bgcolor: isActive
-                  ? "rgba(20,120,130,0.8)"
-                  : "rgba(255,255,255,0.05)",
-                borderRadius: 3,
-                cursor: "pointer",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
-                transition: "all 0.2s ease-in-out",
-                "&:hover": {
-                  bgcolor: "rgba(255,255,255,0.1)",
-                  transform: "scale(1.02)",
-                },
-              }}
-            >
-              <Avatar
+        <List sx={{ overflowY: 'auto' }}>
+          {conversationSummaries.map((s) => {
+            const isActive =
+              s.conversationId === currentConversation.conversationId;
+            return (
+              <ListItem 
+                key={s.conversationId}
+                onClick={() => loadConversation(s.conversationId)}
                 sx={{
-                  width: 32,
-                  height: 32,
-                  bgcolor: teal[700],
-                  fontSize: 14,
-                  fontWeight: 600,
+                  mb: 1.5,
+                  bgcolor: isActive
+                    ? "rgba(20,120,130,0.8)"
+                    : "rgba(255,255,255,0.05)",
+                  borderRadius: 3,
+                  cursor: "pointer",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                  transition: "all 0.2s ease-in-out",
+                  "&:hover": {
+                    bgcolor: "rgba(255,255,255,0.1)",
+                    transform: "scale(1.02)",
+                  },
                 }}
               >
-                {(s.lastMessage?.content || "?")[0].toUpperCase()}
-              </Avatar>
-              <Typography
-                variant="body1"
-                color="white"
-                noWrap
-                sx={{ flex: 1, fontWeight: 500, fontSize: 15 }}
-              >
-                {s.lastMessage?.content || "Empty conversation"}
-              </Typography>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(s.conversationId);
-                }}
-                sx={{ color: "rgba(255,255,255,0.5)", ml: 1 }}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Box>
-          );
-        })
+                <ListItemAvatar>
+                  <Avatar
+                    sx={{
+                      bgcolor: teal[700],
+                      fontSize: 14,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {(s.title || "?")[0].toUpperCase()}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText 
+                  primary={s.title || "New Conversation"}
+                  primaryTypographyProps={{ 
+                    color: "white",
+                    fontWeight: 500,
+                    noWrap: true
+                  }}
+                  secondary={s.lastMessage?.content?.substring(0, 30) + (s.lastMessage?.content?.length > 30 ? '...' : '') || "Empty conversation"}
+                  secondaryTypographyProps={{ 
+                    color: grey[300],
+                    noWrap: true
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(s.conversationId);
+                  }}
+                  sx={{ color: "rgba(255,255,255,0.5)", ml: 1 }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </ListItem>
+            );
+          })}
+        </List>
       )}
     </Box>
   );
 
   return (
-    <Box sx={{ display: "flex", height: "100vh" }}>
+    <Box sx={{ display: "flex", height: "100vh", bgcolor: 'rgb(7, 15, 25)' }}>
       {/* Drawer for small screens */}
       {!isMdUp && (
         <Drawer
@@ -424,6 +525,7 @@ export default function Chat() {
             "& .MuiDrawer-paper": {
               width: "80%",
               boxSizing: "border-box",
+              bgcolor: 'rgb(7, 15, 25)'
             },
           }}
         >
@@ -442,7 +544,6 @@ export default function Chat() {
           flex: 1,
           px: { xs: 1, sm: 3 },
           width: "100%",
-          backgroundColor: "rgb(7, 15, 25)",
           p: { xs: 1.5, sm: 2 },
         }}
       >
@@ -475,18 +576,18 @@ export default function Chat() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Chat with Gemini Pro
+            Chat with Gemini
           </Typography>
           {currentConversation.conversationId && (
             <Button
               startIcon={<DeleteIcon />}
+              variant="outlined"
               color="error"
-              onClick={() =>
-                handleDelete(currentConversation.conversationId)
-              }
+              onClick={() => handleDelete(currentConversation.conversationId)}
               disabled={loadingConversations}
+              size="small"
             >
-              Delete this chat
+              Delete
             </Button>
           )}
         </Box>
@@ -512,9 +613,30 @@ export default function Chat() {
               {error}
             </Typography>
           )}
-          {currentConversation.messages.map((msg, i) => (
-            <Chatitem key={i} content={msg.content} role={msg.role} />
-          ))}
+          
+          {currentConversation.messages.length === 0 ? (
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              flexDirection: 'column',
+              textAlign: 'center',
+              color: grey[400]
+            }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Start a new conversation
+              </Typography>
+              <Typography>
+                Type a message or upload an image to get started
+              </Typography>
+            </Box>
+          ) : (
+            currentConversation.messages.map((msg, i) => (
+              <Chatitem key={i} message={msg} />
+            ))
+          )}
+          
           {loading && (
             <Box
               sx={{
@@ -525,13 +647,47 @@ export default function Chat() {
                 alignItems: "center",
               }}
             >
-              <Avatar>
-                <img src="/openai.png" alt="gemini" width="30px" />
+              <Avatar sx={{ bgcolor: teal[700] }}>
+                <img src="/openai.png" alt="gemini" width="24px" />
               </Avatar>
               <CircularProgress size={20} sx={{ color: "white" }} />
             </Box>
           )}
         </Box>
+
+        {/* Image Preview */}
+        {image && (
+          <Box sx={{ 
+            mt: 2, 
+            p: 1, 
+            bgcolor: 'rgba(255,255,255,0.05)', 
+            borderRadius: 2,
+            position: 'relative'
+          }}>
+            <Typography variant="subtitle2" color={grey[300]} sx={{ mb: 1 }}>
+              Image Preview
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <img 
+                src={image} 
+                alt="Preview" 
+                style={{ 
+                  height: '60px', 
+                  width: '60px',
+                  borderRadius: '4px',
+                  objectFit: 'cover'
+                }} 
+              />
+              <IconButton
+                size="small"
+                onClick={clearImage}
+                sx={{ ml: 1 }}
+              >
+                <MdClose color={red[500]} />
+              </IconButton>
+            </Box>
+          </Box>
+        )}
 
         {/* Input & Controls */}
         <Box
@@ -544,29 +700,31 @@ export default function Chat() {
           }}
         >
           {/* mic (speech-to-text) */}
-          <IconButton onClick={toggleSpeech}>
+          <IconButton onClick={toggleSpeech} sx={{ color: teal[300] }}>
             <MdMic size={28} color={isListening ? red[500] : teal[300]} />
           </IconButton>
 
           {/* play/pause assistant voice */}
-          <IconButton onClick={handlePauseResume}>
+          <IconButton onClick={handlePauseResume} sx={{ color: teal[300] }}>
             {isPaused ? (
-              <MdPlayArrow size={28} color={teal[300]} />
+              <MdPlayArrow size={28} />
             ) : (
-              <MdPause size={28} color={teal[300]} />
+              <MdPause size={28} />
             )}
           </IconButton>
 
           {/* language selector */}
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel sx={{ color: "white" }}>Language</InputLabel>
+            <InputLabel sx={{ color: grey[300] }}>Language</InputLabel>
             <Select
               value={lang}
               label="Language"
               onChange={handleLangChange}
               sx={{
                 color: "white",
-                ".MuiOutlinedInput-notchedOutline": { borderColor: "white" },
+                ".MuiOutlinedInput-notchedOutline": { borderColor: grey[700] },
+                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: teal[300] },
+                "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: teal[300] },
               }}
             >
               <MenuItem value="en-US">English (US)</MenuItem>
@@ -593,11 +751,24 @@ export default function Chat() {
                 {...params}
                 variant="filled"
                 placeholder="Type a message"
-                InputProps={{ ...params.InputProps, disableUnderline: true }}
+                InputProps={{ 
+                  ...params.InputProps, 
+                  disableUnderline: true,
+                  sx: {
+                    color: 'white',
+                    '&:focus': {
+                      borderColor: teal[300]
+                    }
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !loading) {
                     e.preventDefault();
-                    handleSubmit();
+                    if (image) {
+                      handleFileUpload();
+                    } else {
+                      handleSubmit();
+                    }
                   }
                 }}
               />
@@ -605,20 +776,27 @@ export default function Chat() {
           />
 
           {/* file upload */}
-          <IconButton onClick={() => fileInputRef.current.click()}>
-            <MdUploadFile size={28} color={teal[300]} />
+          <IconButton 
+            onClick={() => fileInputRef.current.click()} 
+            sx={{ color: teal[300] }}
+          >
+            <MdUploadFile size={28} />
             <input
               type="file"
-              accept="image/*,text/plain"
+              accept="image/*"
               ref={fileInputRef}
               style={{ display: "none" }}
-              onChange={handleFileUpload}
+              onChange={handleFileChange}
             />
           </IconButton>
 
           {/* send button */}
-          <IconButton onClick={handleSubmit} disabled={loading}>
-            <MdSend size={28} color={teal[300]} />
+          <IconButton 
+            onClick={() => image ? handleFileUpload() : handleSubmit()} 
+            disabled={loading || (!inputText.trim() && !image)}
+            sx={{ color: teal[300] }}
+          >
+            <MdSend size={28} />
           </IconButton>
         </Box>
       </Box>

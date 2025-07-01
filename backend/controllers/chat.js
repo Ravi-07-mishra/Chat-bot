@@ -1,14 +1,13 @@
 const fs = require('fs');
+const path = require('path');
 const User = require('../models/User');
 const { randomUUID } = require('crypto');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const axios = require('axios');
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
-// Helper to pause
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Retry wrapper
 async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   try {
     return await model.generateContent(payload);
@@ -22,18 +21,51 @@ async function generateWithRetry(model, payload, retries = 3, backoff = 1000) {
   }
 }
 
-// Summarize messages for context
+function parseBase64Image(imageBase64) {
+  const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    throw new Error('Invalid base64 image format');
+  }
+  return {
+    mimeType: matches[1],
+    data: matches[2]
+  };
+}
+
+function buildMessageParts(message) {
+  const parts = [];
+  
+  if (message.content) {
+    parts.push({ text: message.content });
+  }
+  
+  if (message.image) {
+    try {
+      const { mimeType, data } = parseBase64Image(message.image);
+      parts.push({
+        inlineData: {
+          mimeType,
+          data
+        }
+      });
+    } catch (err) {
+      console.error('Error parsing image:', err);
+    }
+  }
+  
+  return parts;
+}
+
 async function summarizeMessages(memories) {
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const prompt = [
     { role: 'user', parts: [{ text: 'Summarize these messages succinctly:' }] },
-    ...memories.map((m) => ({ role: m.role, parts: [{ text: m.content }] })),
+    ...memories.map((m) => ({ role: m.role, parts: buildMessageParts(m) })),
   ];
   const res = await generateWithRetry(model, { contents: prompt });
   return res.response.candidates[0].content.parts[0].text || 'Unable to summarize.';
 }
 
-// Transform Google Search API results to Gemini-style response
 function transformToGeminiFormat(data) {
   if (!Array.isArray(data)) return [];
   
@@ -45,7 +77,6 @@ function transformToGeminiFormat(data) {
   }));
 }
 
-// Format live data to plain text
 function formatLiveData(query, data) {
   if (!data || data.length === 0) return 'No results found.';
 
@@ -67,7 +98,6 @@ function formatLiveData(query, data) {
   }).join('\n\n');
 }
 
-// Fetch live data from Google Search API
 async function fetchLiveData(query) {
   try {
     if (!process.env.GOOGLE_API_KEY || !process.env.CUSTOM_SEARCH_ENGINE_ID) {
@@ -101,19 +131,19 @@ async function fetchLiveData(query) {
   }
 }
 
-// Main chat completion function
 async function generateChatCompletion(req, res) {
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, image } = req.body;
     const userMessage = message?.trim();
-    if (!userMessage) {
-      return res.status(400).json({ message: 'Message required' });
+    const userImage = image;
+
+    if (!userMessage && !userImage) {
+      return res.status(400).json({ message: 'Message or image required' });
     }
 
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) return res.status(401).json({ message: 'User not found' });
 
-    // Find or create conversation (using working version logic)
     let conv = conversationId
       ? user.conversations.find((c) => c.conversationId === conversationId)
       : null;
@@ -126,10 +156,20 @@ async function generateChatCompletion(req, res) {
       user.conversations.push(conv);
     }
 
-    // Add user message to conversation
-    conv.messages.push({ role: 'user', content: userMessage });
+    conv.messages.push({ 
+      role: 'user', 
+      content: userMessage,
+      image: userImage 
+    });
 
-    // Handle live data queries (from new version)
+    if (userImage) {
+      const result = await processImageUpload(userImage, conv, userMessage);
+      if (result) {
+        await user.save();
+        return res.json({ conversation: conv });
+      }
+    }
+
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -144,7 +184,6 @@ async function generateChatCompletion(req, res) {
       }
     }
 
-    // If live data found, transform and format it
     if (liveData.length > 0) {
       const transformedData = transformToGeminiFormat(liveData);
       const formattedData = formatLiveData(userMessage, transformedData);
@@ -158,14 +197,12 @@ async function generateChatCompletion(req, res) {
       return res.json({ conversation: conv });
     }
 
-    // Summarize conversation if it exceeds a certain length (from working version)
     if (conv.messages.length > 20) {
       const old = conv.messages.splice(0, 10);
       const summary = await summarizeMessages(old);
       conv.summary = (conv.summary || '') + '\n' + summary;
     }
 
-    // Prepare contents for AI model (include conversation summary and messages)
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -174,16 +211,19 @@ async function generateChatCompletion(req, res) {
       });
     }
 
-    conv.messages.forEach(m => contents.push({ role: m.role, parts: [{ text: m.content }] }));
+    conv.messages.forEach(m => {
+      contents.push({
+        role: m.role,
+        parts: buildMessageParts(m)
+      });
+    });
 
-    // Generate AI response using Google Gemini model
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await generateWithRetry(model, { contents });
 
     const candidate = result.response.candidates[0];
     const botText = candidate.content?.parts?.[0]?.text || '';
 
-    // Add AI response to the conversation
     conv.messages.push({ role: 'assistant', content: botText });
     await user.save();
 
@@ -195,7 +235,50 @@ async function generateChatCompletion(req, res) {
   }
 }
 
-// Stream Chat function (for SSE) - Updated with working version logic
+async function processImageUpload(imageBase64, conversation, userMessage = '') {
+  try {
+    const { mimeType, data } = parseBase64Image(imageBase64);
+    
+    const contents = [
+      ...(conversation.summary
+        ? [{ role: 'system', parts: [{ text: `Summary:\n${conversation.summary}` }] }]
+        : []),
+      ...conversation.messages.map(m => ({
+        role: m.role,
+        parts: buildMessageParts(m)
+      })),
+      {
+        role: 'user',
+        parts: [
+          ...(userMessage ? [{ text: userMessage }] : []),
+          {
+            inlineData: {
+              mimeType,
+              data
+            }
+          }
+        ]
+      }
+    ];
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const result = await model.generateContent({ contents });
+    
+    const candidate = result.response.candidates[0];
+    const botText = candidate.content?.parts?.[0]?.text || '';
+
+    conversation.messages.push({ role: 'assistant', content: botText });
+    return true;
+  } catch (err) {
+    console.error('Image processing error:', err);
+    conversation.messages.push({ 
+      role: 'assistant', 
+      content: 'Sorry, I had trouble processing that image' 
+    });
+    return true;
+  }
+}
+
 async function streamChat(req, res) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -205,11 +288,12 @@ async function streamChat(req, res) {
   res.write('\n');
 
   try {
-    const { message, conversationId } = req.body;
+    const { message, conversationId, image } = req.body;
     const userMessage = message?.trim();
+    const userImage = image;
 
-    if (!userMessage) {
-      res.write(`event: error\ndata:${JSON.stringify({ error: 'Message required' })}\n\n`);
+    if (!userMessage && !userImage) {
+      res.write(`event: error\ndata:${JSON.stringify({ error: 'Message or image required' })}\n\n`);
       return res.end();
     }
 
@@ -219,7 +303,6 @@ async function streamChat(req, res) {
       return res.end();
     }
 
-    // Find or create conversation (using working version logic)
     let conv = conversationId
       ? user.conversations.find((c) => c.conversationId === conversationId)
       : null;
@@ -232,11 +315,26 @@ async function streamChat(req, res) {
       user.conversations.push(conv);
     }
 
-    // Add user message to conversation
-    conv.messages.push({ role: 'user', content: userMessage });
+    conv.messages.push({ 
+      role: 'user', 
+      content: userMessage,
+      image: userImage 
+    });
     await user.save();
 
-    // Handle live data queries (from new version)
+    if (userImage) {
+      const result = await processImageUpload(userImage, conv, userMessage);
+      if (result) {
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        res.write(`event: chunk\ndata:${JSON.stringify({ part: lastMessage.content })}\n\n`);
+        res.write(`event: done\ndata:${JSON.stringify({ 
+          text: lastMessage.content, 
+          conversationId: conv.conversationId 
+        })}\n\n`);
+        return res.end();
+      }
+    }
+
     let liveData = [];
     const queryTriggers = {
       weather: ['weather', 'forecast'],
@@ -251,7 +349,6 @@ async function streamChat(req, res) {
       }
     }
 
-    // Send live data if available
     if (liveData.length > 0) {
       const transformedData = transformToGeminiFormat(liveData);
       const liveMessage = `I found these results for "${userMessage}":\n${formatLiveData(userMessage, transformedData)}`;
@@ -264,7 +361,6 @@ async function streamChat(req, res) {
       return res.end();
     }
 
-    // Prepare contents for AI response (from working version)
     const contents = [];
     if (conv.summary) {
       contents.push({
@@ -273,10 +369,14 @@ async function streamChat(req, res) {
       });
     }
 
-    conv.messages.forEach(m => contents.push({ role: m.role, parts: [{ text: m.content }] }));
+    conv.messages.forEach(m => {
+      contents.push({
+        role: m.role,
+        parts: buildMessageParts(m)
+      });
+    });
 
-    // Generate AI response (streaming version)
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const stream = await model.generateContentStream({ contents });
 
     let buffer = '';
@@ -299,16 +399,16 @@ async function streamChat(req, res) {
   }
 }
 
-// File/Image Upload (SSE) - Using working version
 async function handleUpload(req, res) {
-  let mimeType, imageBase64;
-
+  let imageBase64;
+  
   if (req.file) {
-    mimeType = req.file.mimetype;
-    imageBase64 = fs.readFileSync(req.file.path, { encoding: 'base64' });
+    const mimeType = req.file.mimetype;
+    const data = fs.readFileSync(req.file.path, { encoding: 'base64' });
+    imageBase64 = `data:${mimeType};base64,${data}`;
+    fs.unlinkSync(req.file.path);
   } else if (req.body.imageBase64) {
     imageBase64 = req.body.imageBase64;
-    mimeType = req.body.mimeType || 'image/jpeg';
   } else {
     return res.status(400).json({ message: 'Image (file or base64) required' });
   }
@@ -341,31 +441,37 @@ async function handleUpload(req, res) {
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ role: 'user', content: userMessage });
+    conv.messages.push({ 
+      role: 'user', 
+      content: userMessage,
+      image: imageBase64 
+    });
     await user.save();
 
+    const { mimeType, data } = parseBase64Image(imageBase64);
     const contents = [
       ...(conv.summary
         ? [{ role: 'system', parts: [{ text: `Summary:\n${conv.summary}` }] }]
         : []),
       ...conv.messages.map(m => ({
         role: m.role,
-        parts: [{ text: m.content }],
+        parts: buildMessageParts(m)
       })),
       {
         role: 'user',
         parts: [
+          ...(userMessage ? [{ text: userMessage }] : []),
           {
             inlineData: {
               mimeType,
-              data: imageBase64,
-            },
-          },
-        ],
-      },
+              data
+            }
+          }
+        ]
+      }
     ];
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const stream = await model.generateContentStream({ contents });
 
     let buffer = '';
@@ -391,8 +497,6 @@ async function handleUpload(req, res) {
   }
 }
 
-
-// ─── DELETE CONVERSATION ───────────────────────────────────────────────────
 async function deleteConversation(req, res) {
   try {
     const user = await User.findById(res.locals.jwtData.id);
@@ -416,7 +520,6 @@ async function deleteConversation(req, res) {
   }
 }
 
-// ─── SMART SUGGESTIONS ──────────────────────────────────────────────────────
 async function getSuggestions(req, res) {
   const { prefix } = req.body;
   if (!prefix || prefix.length < 2) {
@@ -425,7 +528,7 @@ async function getSuggestions(req, res) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       generationConfig: { temperature: 0.3, maxOutputTokens: 60 },
     });
     const prompt = `Suggest 5 completions for: "${prefix}" (JSON array only)`;
@@ -456,15 +559,19 @@ async function getSuggestions(req, res) {
     return res.json({ suggestions: [] });
   }
 }
+
 async function getConversationsSummary(req, res) {
   const user = await User.findById(res.locals.jwtData.id);
   if (!user) return res.status(401).json({ message: "Invalid user" });
 
   const conversations = user.conversations.map((c) => ({
     conversationId: c.conversationId,
+    title: c.title,
     lastMessage: c.messages.slice(-1)[0] || null,
     summary: c.summary || "",
-  }));
+    updatedAt: c.updatedAt
+  })).sort((a, b) => b.updatedAt - a.updatedAt);
+  
   return res.json({ conversations });
 }
 

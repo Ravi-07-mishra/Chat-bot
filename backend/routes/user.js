@@ -1,24 +1,23 @@
-// routes/userRoutes.js
 const express = require("express");
-const { getAllusers, userSignup, userLogin, verifyUser, logoutuser } = require("../controllers/user");
-const { validate, signupValidator, LoginValidator } = require("../utils/validators");
+const { 
+  getAllUsers, 
+  userSignup, 
+  userLogin, 
+  verifyUser, 
+  logoutUser 
+} = require("../controllers/user");
+const { validate, signupValidator, loginValidator } = require("../utils/validators");
 const { verifyToken } = require("../utils/token-manager");
 
 const userRoutes = express.Router();
 
 // GET all users (admin/debug)
-userRoutes.get("/", getAllusers);
+userRoutes.get("/", getAllUsers);
 
-// POST /signup
-userRoutes.post("/signup", validate(signupValidator), userSignup);
-
-// POST /login
-userRoutes.post("/login", validate(LoginValidator), userLogin);
-
-// GET /auth-status
-userRoutes.get("/auth-status", verifyToken, verifyUser);
-
-// POST /logout
-userRoutes.post("/logout", logoutuser);
+// User authentication
+userRoutes.post("/register", validate(signupValidator), userSignup);
+userRoutes.post("/login", validate(loginValidator), userLogin);
+userRoutes.get("/verify", verifyToken, verifyUser);
+userRoutes.post("/logout", logoutUser);
 
 module.exports = userRoutes;

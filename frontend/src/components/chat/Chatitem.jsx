@@ -1,32 +1,36 @@
-import React, { useCallback, lazy, Suspense } from "react";
-import { Avatar, Box, Typography, Paper, useTheme, useMediaQuery, Link } from "@mui/material";
+import React, { useCallback, lazy, Suspense, useState } from "react";
+import { 
+  Avatar, Box, Typography, Paper, useTheme, useMediaQuery, Link,
+  IconButton, Collapse
+} from "@mui/material";
 import { teal, grey } from "@mui/material/colors";
 import { useAuth } from "../../assets/context/AuthContext";
 import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import ExpandIcon from '@mui/icons-material/Expand';
+import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen';
 
-// Lazy-load the syntax highlighter
 const SyntaxHighlighter = lazy(() =>
   import("react-syntax-highlighter").then((mod) => ({
     default: mod.Prism,
   }))
 );
 
-const Chatitem = ({ content, role }) => {
+const Chatitem = ({ message }) => {
+  const { content, role, image } = message;
   const auth = useAuth();
   const theme = useTheme();
   const isSmall = useMediaQuery(theme.breakpoints.down("sm"));
   const isBot = role === "assistant" || role === "assistant-stream";
+  const [expanded, setExpanded] = useState(false);
 
   const formatMessage = useCallback(
     (message) => {
-      // First check for code blocks (from working version)
       if (message.includes("```")) {
         const parts = [];
         const segments = message.split("```");
         segments.forEach((seg, i) => {
           if (i % 2 === 0) {
             if (seg.trim()) {
-              // Handle URLs in text segments (new feature)
               const urlRegex = /(https?:\/\/[^\s]+)/g;
               if (urlRegex.test(seg)) {
                 const textParts = seg.split(urlRegex);
@@ -78,7 +82,6 @@ const Chatitem = ({ content, role }) => {
               }
             }
           } else {
-            // Code block handling (from working version)
             let lang = "javascript";
             let code = seg;
             const firstLine = seg.split("\n")[0].trim();
@@ -120,7 +123,6 @@ const Chatitem = ({ content, role }) => {
         return parts;
       }
 
-      // Handle URLs in plain messages (new feature)
       const urlRegex = /(https?:\/\/[^\s]+)/g;
       if (urlRegex.test(message)) {
         const parts = message.split(urlRegex);
@@ -156,7 +158,6 @@ const Chatitem = ({ content, role }) => {
         });
       }
 
-      // Default text rendering (from working version)
       return (
         <Typography
           color="white"
@@ -174,6 +175,10 @@ const Chatitem = ({ content, role }) => {
     [isSmall]
   );
 
+  const handleToggleExpand = () => {
+    setExpanded(!expanded);
+  };
+
   return (
     <Paper
       elevation={0}
@@ -184,6 +189,7 @@ const Chatitem = ({ content, role }) => {
         bgcolor: isBot ? "rgba(0,77,86,0.8)" : "rgba(0,77,86,0.1)",
         borderRadius: 2,
         alignItems: "flex-start",
+        position: 'relative',
       }}
     >
       <Avatar
@@ -192,6 +198,7 @@ const Chatitem = ({ content, role }) => {
           mr: 2,
           width: { xs: 32, sm: 40 },
           height: { xs: 32, sm: 40 },
+          flexShrink: 0,
         }}
       >
         {isBot ? (
@@ -200,7 +207,56 @@ const Chatitem = ({ content, role }) => {
           auth.user?.name?.[0] || "U"
         )}
       </Avatar>
-      <Box sx={{ flex: 1 }}>{formatMessage(content)}</Box>
+      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+        {image && (
+          <Box sx={{ mb: 1, position: 'relative' }}>
+            <Collapse in={expanded} collapsedSize={200}>
+              <img 
+                src={image} 
+                alt="User uploaded" 
+                style={{ 
+                  width: '100%', 
+                  borderRadius: '8px',
+                  maxHeight: expanded ? '70vh' : '200px',
+                  objectFit: 'contain',
+                  cursor: 'pointer',
+                  backgroundColor: grey[900]
+                }}
+                onClick={handleToggleExpand}
+              />
+            </Collapse>
+            <IconButton
+              size="small"
+              onClick={handleToggleExpand}
+              sx={{
+                position: 'absolute',
+                bottom: 8,
+                right: 8,
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                color: 'white',
+                '&:hover': {
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                }
+              }}
+            >
+              {expanded ? <CloseFullscreenIcon /> : <ExpandIcon />}
+            </IconButton>
+          </Box>
+        )}
+        {content ? (
+          formatMessage(content)
+        ) : image ? (
+          <Typography
+            color="white"
+            sx={{
+              fontStyle: 'italic',
+              fontSize: { xs: "0.875rem", sm: "1rem" },
+            }}
+          >
+            {isBot ? "Here's what I see in the image:" : "Sent an image"}
+          </Typography>
+        ) : null}
+      </Box>
     </Paper>
   );
 };
