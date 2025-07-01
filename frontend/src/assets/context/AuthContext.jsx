@@ -19,12 +19,13 @@ export const AuthProvider = ({ children }) => {
       setUser({ email: data.email, name: data.name });
       setIsLoggedIn(true);
     } catch (error) {
-      if (error.message === "Not authenticated") {
-        setIsLoggedIn(false);
-      } else {
-        console.error("Auth check error:", error);
-      }
-    } finally {
+    if (error.message === "Not authenticated" || error.response?.status === 401) {
+      setIsLoggedIn(false);
+      // Force cookie cleanup
+      document.cookie = 'bot_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    }
+    console.error("Auth error:", error);
+  } finally {
       setIsLoading(false);
     }
   };

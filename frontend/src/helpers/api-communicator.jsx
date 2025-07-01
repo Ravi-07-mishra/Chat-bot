@@ -66,32 +66,65 @@ function parseSSE(buffer, onChunk, onDone) {
 }
 
 export function streamChat({ message, conversationId, image, onChunk, onDone, onError }) {
+  // Ensure we have a valid message or image
+  if (!message && !image) {
+    onError("Message or image is required");
+    return;
+  }
+
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
     },
-    credentials: "include",
-    body: JSON.stringify({ message, conversationId, image }),
+    credentials: "include", // Essential for cookies
+    body: JSON.stringify({ 
+      message: message || "", 
+      conversationId,
+      image: image || null 
+    }),
   }).then((res) => {
-      if (!res.ok) throw new Error("Streaming failed");
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-
-      function read() {
-        reader.read().then(({ done, value }) => {
-          if (done) return;
-          buffer += decoder.decode(value, { stream: true });
-          buffer = parseSSE(buffer, onChunk, (text, conversationId) => {
-            onDone(text, conversationId);
-            buffer = "";
-          });
-          read();
-        }).catch(onError);
+    if (!res.ok) {
+      // Handle specific error statuses
+      if (res.status === 401) {
+        window.dispatchEvent(new Event("unauthorized"));
       }
-      read();
-    }).catch(onError);
+      throw new Error(`Request failed with status ${res.status}`);
+    }
+    
+    // Handle streaming response
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    function read() {
+      reader.read().then(({ done, value }) => {
+        if (done) {
+          if (buffer.trim()) {
+            try {
+              const data = JSON.parse(buffer);
+              if (data.text) onDone(data.text, data.conversationId);
+            } catch {
+              onError("Invalid response format");
+            }
+          }
+          return;
+        }
+        
+        buffer += decoder.decode(value, { stream: true });
+        buffer = parseSSE(buffer, onChunk, (text, conversationId) => {
+          onDone(text, conversationId);
+          buffer = "";
+        });
+        read();
+      }).catch(onError);
+    }
+    
+    read();
+  }).catch(err => {
+    console.error("Stream error:", err);
+    onError(err.message);
+  });
 }
 
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {

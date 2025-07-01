@@ -35,7 +35,6 @@ import { useAuth } from "../assets/context/AuthContext";
 import {
   getConversations,
   getConversationById,
-  sendChatMessage,
   streamChat,
   uploadFile,
   getSuggestions,
@@ -65,7 +64,7 @@ export default function Chat() {
   const [error, setError] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
-  const [image, setImage] = useState(null); // Store selected image
+  const [image, setImage] = useState(null);
 
   // Speech Synthesis States & Handlers
   const [lang, setLang] = useState("en-US");
@@ -103,7 +102,7 @@ export default function Chat() {
 
   // Redirect if not logged in
   useEffect(() => {
-    if (!auth?.isLoggedIn) navigate("/login");
+    if (auth?.isLoggedIn === false) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
   // Auto-scroll on new messages or loading
@@ -179,7 +178,7 @@ export default function Chat() {
     
     const reader = new FileReader();
     reader.onload = () => {
-      setImage(reader.result); // Store base64 image
+      setImage(reader.result);
     };
     reader.readAsDataURL(file);
   };
@@ -190,57 +189,11 @@ export default function Chat() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Send message (supports text and images)
-  const handleSubmit = async () => {
-    const text = inputText.trim();
-    if (!text && !image) return;
-
-    setInputText("");
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Add user message optimistically
-      const userMessage = {
-        role: 'user',
-        content: text,
-        image: image || null
-      };
-      
-      setCurrentConversation(c => ({
-        ...c,
-        messages: [...c.messages, userMessage]
-      }));
-      
-      // Send to backend
-      const convo = await sendChatMessage({
-        message: text,
-        conversationId: currentConversation.conversationId,
-        image: image
-      });
-      
-      // Update with server response
-      setCurrentConversation(convo);
-      await loadConversationSummaries();
-      
-      // Clear image after successful send
-      clearImage();
-    } catch (err) {
-      setError(err.message);
-      // Remove optimistic message on error
-      setCurrentConversation(c => ({
-        ...c,
-        messages: c.messages.slice(0, -1)
-      }));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // SSE streaming for text messages
-  const handleStream = () => {
+  // Handle text messages with streaming
+  const handleTextMessage = () => {
     const text = inputText.trim();
     if (!text) return;
+
     setInputText("");
     setLoading(true);
     setError(null);
@@ -255,6 +208,7 @@ export default function Chat() {
     streamChat({
       message: text,
       conversationId: currentConversation.conversationId,
+      image: image,
       onChunk: (part) => {
         buffer += part;
         setCurrentConversation((c) => ({
@@ -275,6 +229,7 @@ export default function Chat() {
         }));
         loadConversationSummaries();
         setLoading(false);
+        clearImage();
       },
       onError: (err) => {
         setError(err);
@@ -291,13 +246,16 @@ export default function Chat() {
   // Handle file upload with streaming
   const handleFileUpload = () => {
     if (!image) return;
+    const text = inputText.trim();
+    
+    setInputText("");
     setLoading(true);
     setError(null);
 
     // Add user message optimistically
     const userMessage = {
       role: 'user',
-      content: inputText.trim(),
+      content: text,
       image: image
     };
     
@@ -309,7 +267,7 @@ export default function Chat() {
     let buffer = "";
     uploadFile({
       file: image,
-      text: inputText.trim(),
+      text: text,
       conversationId: currentConversation.conversationId,
       onChunk: (part) => {
         buffer += part;
@@ -344,6 +302,15 @@ export default function Chat() {
         }));
       },
     });
+  };
+
+  // Send message (handles both text and images)
+  const handleSend = () => {
+    if (image) {
+      handleFileUpload();
+    } else {
+      handleTextMessage();
+    }
   };
 
   // Debounced suggestions fetch
@@ -377,7 +344,7 @@ export default function Chat() {
         const t = ev.results[0][0].transcript;
         if (ev.results[0].isFinal) {
           setInputText(t);
-          handleSubmit();
+          handleSend();
         }
       };
       setSpeechRecognition(recog);
@@ -408,8 +375,10 @@ export default function Chat() {
 
   // Initial load
   useEffect(() => {
-    loadConversationSummaries();
-  }, []);
+    if (auth?.isLoggedIn) {
+      loadConversationSummaries();
+    }
+  }, [auth?.isLoggedIn]);
 
   // Sidebar content
   const sidebarContent = (
@@ -764,11 +733,7 @@ export default function Chat() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !loading) {
                     e.preventDefault();
-                    if (image) {
-                      handleFileUpload();
-                    } else {
-                      handleSubmit();
-                    }
+                    handleSend();
                   }
                 }}
               />
@@ -792,7 +757,7 @@ export default function Chat() {
 
           {/* send button */}
           <IconButton 
-            onClick={() => image ? handleFileUpload() : handleSubmit()} 
+            onClick={handleSend} 
             disabled={loading || (!inputText.trim() && !image)}
             sx={{ color: teal[300] }}
           >
