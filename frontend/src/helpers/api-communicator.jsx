@@ -79,6 +79,13 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
   // Get token explicitly
   const token = getCookie('bot_token');
 
+  // Construct payload without null/undefined fields
+  const payload = {
+    message: message?.trim() || "",
+    ...(conversationId && { conversationId }),
+    ...(image && { image })
+  };
+
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
     method: "POST",
     headers: { 
@@ -86,17 +93,21 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
       "Authorization": token ? `Bearer ${token}` : ""
     },
     credentials: "include",
-    body: JSON.stringify({ 
-      message: message || "", 
-      conversationId,
-      image: image || null 
-    }),
-  }).then((res) => {
+    body: JSON.stringify(payload),
+  }).then(async (res) => {
     if (res.status === 401) {
       window.dispatchEvent(new CustomEvent("unauthorized"));
       throw new Error("Unauthorized");
     }
-    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    
+    if (!res.ok) {
+      const errorResponse = await res.json().catch(() => ({}));
+      throw new Error(
+        errorResponse.message || 
+        errorResponse.errors?.[0]?.msg || 
+        `Request failed with status ${res.status}`
+      );
+    }
     
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
@@ -127,12 +138,13 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
     
     read();
   }).catch(err => {
-    if (err.message.includes("401")) {
+    if (err.message.includes("Unauthorized")) {
       window.dispatchEvent(new CustomEvent("unauthorized"));
     }
     onError(err.message);
   });
 }
+
 export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
   const reader = new FileReader();
 

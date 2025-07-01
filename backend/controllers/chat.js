@@ -218,7 +218,7 @@ async function generateChatCompletion(req, res) {
       });
     });
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await generateWithRetry(model, { contents });
 
     const candidate = result.response.candidates[0];
@@ -261,7 +261,7 @@ async function processImageUpload(imageBase64, conversation, userMessage = '') {
       }
     ];
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const result = await model.generateContent({ contents });
     
     const candidate = result.response.candidates[0];
@@ -471,7 +471,7 @@ async function handleUpload(req, res) {
       }
     ];
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const stream = await model.generateContentStream({ contents });
 
     let buffer = '';
@@ -528,7 +528,7 @@ async function getSuggestions(req, res) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       generationConfig: { temperature: 0.3, maxOutputTokens: 60 },
     });
     const prompt = `Suggest 5 completions for: "${prefix}" (JSON array only)`;
