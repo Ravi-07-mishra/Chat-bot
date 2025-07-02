@@ -43,6 +43,7 @@ import {
   getConversations,
   getConversationById,
   sendChat,
+  streamChat,
   uploadFile,
   getSuggestions,
   deleteConversation,
