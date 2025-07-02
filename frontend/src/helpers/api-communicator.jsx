@@ -7,9 +7,13 @@ function getCookie(name) {
   if (parts.length === 2) return parts.pop().split(';').shift();
 }
 
-// ————— Authentication —————
-export const signupUser = async (name, email, password) => {
-  const res = await api.post('/user/signup', { name, email, password });
+export const sendOtp = async (email) => {
+  const res = await api.post('/user/sendotp', { email });
+  return res.data;
+};
+
+export const signupUser = async (name, email, password, otp) => {
+  const res = await api.post('/user/signup', { name, email, password, otp });
   return res.data.user;
 };
 

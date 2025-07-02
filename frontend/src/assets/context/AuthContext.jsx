@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { loginUser, signupUser, checkAuthStatus } from "../../helpers/api-communicator";
+import { loginUser, signupUser, checkAuthStatus, sendOtp } from "../../helpers/api-communicator";
 import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../api";
 
@@ -21,7 +21,6 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       if (error.message === "Not authenticated" || error.response?.status === 401) {
         setIsLoggedIn(false);
-        // Clear all auth cookies
         ['bot_token', 'auth_token'].forEach(name => {
           document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
         });
@@ -37,6 +36,7 @@ export const AuthProvider = ({ children }) => {
     if (!publicRoutes.includes(location.pathname)) {
       verifyAuthStatus();
     } else {
+      setIsLoggedIn(false);  // ✅ FIXED: Set false explicitly
       setIsLoading(false);
     }
   }, [location.pathname]);
@@ -55,13 +55,24 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (name, email, password) => {
+  const signup = async (name, email, password, otp) => {
     setIsLoading(true);
     try {
-      const data = await signupUser(name, email, password);
+      const data = await signupUser(name, email, password, otp);
       setUser({ email: data.email, name: data.name });
       setIsLoggedIn(true);
       navigate("/chat", { replace: true });
+    } catch (error) {
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const sendOtpToEmail = async (email) => {
+    setIsLoading(true);
+    try {
+      await sendOtp(email);
     } catch (error) {
       throw error;
     } finally {
@@ -75,12 +86,9 @@ export const AuthProvider = ({ children }) => {
       await api.post("/user/logout");
       setUser(null);
       setIsLoggedIn(false);
-      
-      // Clear all auth cookies
       ['bot_token', 'auth_token'].forEach(name => {
         document.cookie = `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
       });
-      
       navigate("/login", { replace: true });
     } catch (err) {
       console.error("Logout error:", err);
@@ -90,14 +98,17 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isLoggedIn, 
-      isLoading, 
-      login, 
-      signup, 
-      logout 
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoggedIn,
+        isLoading,
+        login,
+        signup,
+        sendOtp: sendOtpToEmail,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

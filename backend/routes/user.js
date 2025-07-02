@@ -4,7 +4,8 @@ const {
   userSignup, 
   userLogin, 
   verifyUser, 
-  logoutUser 
+  logoutUser ,
+  sendOtp
 } = require("../controllers/user");
 const { validate, signupValidator, loginValidator } = require("../utils/validators");
 const { verifyToken } = require("../utils/token-manager");
@@ -19,5 +20,5 @@ userRoutes.post("/register", validate(signupValidator), userSignup);
 userRoutes.post("/login", validate(loginValidator), userLogin);
 userRoutes.get("/verify", verifyToken, verifyUser);
 userRoutes.post("/logout", logoutUser);
-
+userRoutes.post('/sendotp',sendOtp);
 module.exports = userRoutes;

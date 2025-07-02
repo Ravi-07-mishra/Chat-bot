@@ -70,7 +70,7 @@ function transformToGeminiFormat(data) {
   if (!Array.isArray(data)) return [];
   
   return data.map(item => ({
-    role: 'system',
+    role: 'user',
     parts: [{
       text: `${item.title || 'No title'}: ${item.snippet || 'No description available'}\nLink: ${item.link || '#'}`
     }]
@@ -206,7 +206,7 @@ async function generateChatCompletion(req, res) {
     const contents = [];
     if (conv.summary) {
       contents.push({
-        role: 'system',
+        role: 'user',
         parts: [{ text: `Summary:\n${conv.summary}` }],
       });
     }
@@ -241,7 +241,7 @@ async function processImageUpload(imageBase64, conversation, userMessage = '') {
     
     const contents = [
       ...(conversation.summary
-        ? [{ role: 'system', parts: [{ text: `Summary:\n${conversation.summary}` }] }]
+        ? [{ role: 'user', parts: [{ text: `Summary:\n${conversation.summary}` }] }]
         : []),
       ...conversation.messages.map(m => ({
         role: m.role,
@@ -406,7 +406,8 @@ async function streamChat(req, res) {
 
 async function handleUpload(req, res) {
   let imageBase64;
-  
+
+  // 1) Read file or base64
   if (req.file) {
     const mimeType = req.file.mimetype;
     const data = fs.readFileSync(req.file.path, { encoding: 'base64' });
@@ -420,18 +421,20 @@ async function handleUpload(req, res) {
 
   const userMessage = (req.body.message || 'Please describe this image.').trim();
 
-  // Set SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
+  // 2) Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  res.write('\n');
 
   try {
+    // 3) Load user & conversation
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
-      res.write(`event: error\ndata: ${JSON.stringify({ error: 'Invalid user' })}\n\n`);
-      res.end();
-      return;
+      res.write(`event: error\ndata:${JSON.stringify({ error: 'Invalid user' })}\n\n`);
+      return res.end();
     }
 
     let conv = req.body.conversationId
@@ -446,36 +449,50 @@ async function handleUpload(req, res) {
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ 
-      role: 'user', 
+    // 4) Persist the incoming user message + image
+    conv.messages.push({
+      role: 'user',
       content: userMessage,
-      image: imageBase64 
+      image: imageBase64,
     });
     await user.save();
 
+    // 5) Parse the image
     const { mimeType, data } = parseBase64Image(imageBase64);
-    const contents = [
-      ...(conv.summary
-        ? [{ role: 'system', parts: [{ text: `Summary:\n${conv.summary}` }] }]
-        : []),
-      ...conv.messages.map(m => ({
-        role: m.role,
-        parts: buildMessageParts(m)
-      })),
-      {
-        role: 'user',
-        parts: [
-          ...(userMessage ? [{ text: userMessage }] : []),
-          {
-            inlineData: {
-              mimeType,
-              data
-            }
-          }
-        ]
-      }
-    ];
 
+    // 6) Summarize old messages if too long
+    if (conv.messages.length > 20) {
+      const old = conv.messages.splice(0, 10);
+      const summary = await summarizeMessages(old);
+      conv.summary = [conv.summary, summary].filter(Boolean).join('\n');
+    }
+
+    // 7) Build the contents array, mapping roles for Gemini
+    const contents = [];
+    if (conv.summary) {
+      contents.push({
+        role: 'user',   // summary as user context
+        parts: [{ text: `Context from previous chats:\n${conv.summary}` }],
+      });
+    }
+
+    conv.messages.forEach(m => {
+      contents.push({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: buildMessageParts(m),
+      });
+    });
+
+    // 8) Append the new user-with-image turn
+    contents.push({
+      role: 'user',
+      parts: [
+        ...(userMessage ? [{ text: userMessage }] : []),
+        { inlineData: { mimeType, data } },
+      ],
+    });
+
+    // 9) Stream from Gemini
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const stream = await model.generateContentStream({ contents });
 
@@ -483,28 +500,26 @@ async function handleUpload(req, res) {
     for await (const chunk of stream.stream) {
       const part = chunk.text() || '';
       buffer += part;
-      
-      // Send chunk event
-      res.write(`event: chunk\n`);
-      res.write(`data: ${JSON.stringify({ part })}\n\n`);
-      res.flush(); // Ensure data is sent immediately
+      // send each chunk
+      res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
+      res.flush();
     }
 
+    // 10) Finalize and save
     const finalText = buffer.trim();
     conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
-    // Send completion event
-    res.write(`event: done\n`);
-    res.write(`data: ${JSON.stringify({
+    // send done
+    res.write(`event: done\ndata:${JSON.stringify({
       text: finalText,
       conversationId: conv.conversationId,
     })}\n\n`);
     res.end();
+
   } catch (err) {
     console.error('handleUpload error:', err);
-    res.write(`event: error\n`);
-    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    res.write(`event: error\ndata:${JSON.stringify({ error: err.message || 'Stream failed' })}\n\n`);
     res.end();
   }
 }

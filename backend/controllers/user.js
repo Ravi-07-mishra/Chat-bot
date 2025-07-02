@@ -1,5 +1,8 @@
 const User = require("../models/User");
+const OTP = require("../models/otpmodel");
 const bcrypt = require("bcryptjs");
+const otpGenerator = require('otp-generator');
+const sendOtpEmail = require('../utils/mailer');
 const { createToken } = require("../utils/token-manager");
 
 // Cookie configuration helper
@@ -22,26 +25,95 @@ const getAllUsers = async (req, res) => {
   }
 };
 
-// POST /signup
+// POST /sendotp
+const sendOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'User already registered',
+      });
+    }
+
+    // Generate OTP
+    const otp = otpGenerator.generate(6, {
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    // Delete any existing OTPs for this email
+    await OTP.deleteMany({ email });
+
+    // Create new OTP with 5-minute expiration
+    await OTP.create({ email, otp });
+
+    // Send email
+    await sendOtpEmail(email, otp);
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully',
+    });
+  } catch (error) {
+    console.error("OTP send error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to send OTP',
+      error: error.message
+    });
+  }
+};
+
+// POST /signup (with OTP verification)
 const userSignup = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, otp } = req.body;
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !otp) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
+    // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(409).json({ message: "User already registered" });
     }
 
+    // Find OTP record
+    const otpRecord = await OTP.findOne({ email });
+    if (!otpRecord) {
+      return res.status(400).json({
+        message: 'OTP expired or not requested',
+      });
+    }
+
+    // Verify OTP
+    if (otpRecord.otp !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP',
+      });
+    }
+
+    // Hash password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Create user
     const user = new User({ name, email, password: hashedPassword });
     await user.save();
 
+    // Delete OTP after successful verification
+    await OTP.deleteOne({ _id: otpRecord._id });
+
+    // Create token and set cookie
     const token = createToken(user._id.toString(), user.email, "7d");
     res.cookie("bot_token", token, getCookieSettings());
 
@@ -127,6 +199,7 @@ const logoutUser = (req, res) => {
 
 module.exports = {
   getAllUsers,
+  sendOtp,
   userSignup,
   userLogin,
   verifyUser,
