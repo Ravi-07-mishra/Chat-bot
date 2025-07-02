@@ -1,3 +1,5 @@
+// src/pages/Chat.jsx
+
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
@@ -40,11 +42,10 @@ import { useAuth } from "../assets/context/AuthContext";
 import {
   getConversations,
   getConversationById,
-  streamChat,
+  sendChat,
   uploadFile,
   getSuggestions,
   deleteConversation,
-  sendChat,
 } from "../helpers/api-communicator";
 
 export default function Chat() {
@@ -57,7 +58,6 @@ export default function Chat() {
   const chatContainerRef = useRef(null);
   const debounceRef = useRef(null);
 
-  // Component state
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentConversation, setCurrentConversation] = useState({
     conversationId: null,
@@ -69,38 +69,56 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
-  const [isListening, setIsListening] = useState(false);
 
-  // For image upload
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
 
   // Speech Synthesis States
   const [lang, setLang] = useState("en-US");
   const [isPaused, setPaused] = useState(false);
+
+  // Speech Recognition
+  const [isListening, setIsListening] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  // Handle language change
-  const handleLangChange = (e) => setLang(e.target.value);
-
-  // Pause/resume speech
-  const handlePauseResume = () => {
-    if (!window.speechSynthesis) return;
-    if (isPaused) {
-      window.speechSynthesis.resume();
-      setPaused(false);
-    } else {
-      window.speechSynthesis.pause();
-      setPaused(true);
+  // — Persist last convoId to localStorage —
+  useEffect(() => {
+    if (currentConversation.conversationId) {
+      localStorage.setItem(
+        "lastConvId",
+        currentConversation.conversationId
+      );
     }
-  };
+  }, [currentConversation.conversationId]);
 
-  // Speak assistant's last message
+  // — On mount: load summaries & last convo —
+  useEffect(() => {
+    if (auth?.isLoggedIn) {
+      loadConversationSummaries();
+      const last = localStorage.getItem("lastConvId");
+      if (last) loadConversation(last);
+    }
+  }, [auth?.isLoggedIn]);
+
+  // — Redirect if not logged in —
+  useEffect(() => {
+    if (auth?.isLoggedIn === false) navigate("/login");
+  }, [auth?.isLoggedIn, navigate]);
+
+  // — Auto‑scroll chat container —
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
+  }, [currentConversation.messages, loading]);
+
+  // — Speak assistant messages —
   useEffect(() => {
     const msgs = currentConversation.messages;
-    if (msgs.length === 0 || !window.speechSynthesis) return;
+    if (msgs.length === 0) return;
     const last = msgs[msgs.length - 1];
-    if (last.role === "assistant") {
+    if (last.role === "assistant" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       setPaused(false);
       const utt = new SpeechSynthesisUtterance(last.content);
@@ -109,19 +127,7 @@ export default function Chat() {
     }
   }, [currentConversation.messages, lang]);
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (auth?.isLoggedIn === false) navigate("/login");
-  }, [auth?.isLoggedIn, navigate]);
-
-  // Auto-scroll
-  useEffect(() => {
-    if (chatContainerRef.current) {
-      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-    }
-  }, [currentConversation.messages, loading]);
-
-  // Load conversation summaries
+  // — Load all conversation summaries —
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -135,7 +141,7 @@ export default function Chat() {
     }
   };
 
-  // Load one conversation
+  // — Load specific conversation by ID —
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
@@ -150,9 +156,10 @@ export default function Chat() {
     }
   };
 
-  // Delete a conversation
+  // — Delete conversation —
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this chat?")) return;
+    if (!window.confirm("Are you sure you want to delete this chat?"))
+      return;
     setLoadingConversations(true);
     setError(null);
     try {
@@ -168,30 +175,26 @@ export default function Chat() {
     }
   };
 
-  // Handle file selection
+  // — File selection & validation —
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!file.type.match("image.*")) {
-      setError("Please select an image file");
-      return;
+      return setError("Please select an image file");
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError("Image size should be less than 5MB");
-      return;
+      return setError("Image size should be less than 5 MB");
     }
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
-
-  // Clear selected image
   const clearImage = () => {
     setImageFile(null);
     setImagePreview(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Send a text-only message
+  // — Send text-only message (fallback) —
   const handleTextMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
@@ -199,7 +202,7 @@ export default function Chat() {
     setLoading(true);
     setError(null);
 
-    // Optimistic UI
+    // optimistic UI
     setCurrentConversation((c) => ({
       ...c,
       messages: [...c.messages, { role: "user", content: text }],
@@ -218,7 +221,7 @@ export default function Chat() {
       await loadConversationSummaries();
     } catch (err) {
       setError(err.message || "Request failed");
-      // Roll back
+      // rollback
       setCurrentConversation((c) => ({
         ...c,
         messages: c.messages.slice(0, -1),
@@ -228,83 +231,71 @@ export default function Chat() {
     }
   };
 
-  // Handle image upload + streaming
-  const handleFileUpload = () => {
-    if (!(imageFile instanceof Blob)) {
-      setError("Please select an image file to upload.");
-      return;
-    }
-    const text = inputText.trim();
-    setInputText("");
-    setLoading(true);
-    setError(null);
-
-    // Optimistic UI: show user image
-    const userMsg = {
-      role: "user",
-      content: text,
-      image: imagePreview,
-    };
-    setCurrentConversation((c) => ({
-      ...c,
-      messages: [...c.messages, userMsg],
-    }));
-
-    let buffer = "";
-    uploadFile({
-      file: imageFile,
-      text,
-      conversationId: currentConversation.conversationId || undefined,
-      onChunk: (part) => {
-        buffer += part;
-        setCurrentConversation((c) => ({
-          ...c,
-          messages: [
-            ...c.messages.filter((m) => m.role !== "assistant-stream"),
-            { role: "assistant-stream", content: buffer },
-          ],
-        }));
-      },
-      onDone: (full, convId) => {
-        setCurrentConversation({
-          conversationId: convId || currentConversation.conversationId,
-          messages: [
-            ...currentConversation.messages.filter(
-              (m) => m.role !== "assistant-stream"
-            ),
-            { role: "assistant", content: full },
-          ],
-        });
-        loadConversationSummaries();
-        setLoading(false);
-        clearImage();
-      },
-      onError: (msg) => {
-        setError(msg);
-        setLoading(false);
-        clearImage();
-        // rollback
-        setCurrentConversation((c) => ({
-          ...c,
-          messages: c.messages.slice(0, -1),
-        }));
-      },
-    });
-  };
-
-  // Unified send handler
+  // — Unified send handler (text vs. image) —
   const handleSend = () => {
     if (imageFile) {
-      handleFileUpload();
+      const text = inputText.trim();
+      setInputText("");
+      setLoading(true);
+      setError(null);
+
+      // optimistic UI with image preview
+      setCurrentConversation((c) => ({
+        ...c,
+        messages: [
+          ...c.messages,
+          { role: "user", content: text, image: imagePreview },
+        ],
+      }));
+
+      let buffer = "";
+      uploadFile({
+        file: imageFile,
+        text,
+        conversationId: currentConversation.conversationId,
+        onChunk: (part) => {
+          buffer += part;
+          setCurrentConversation((c) => ({
+            ...c,
+            messages: [
+              ...c.messages.filter((m) => m.role !== "assistant-stream"),
+              { role: "assistant-stream", content: buffer },
+            ],
+          }));
+        },
+        onDone: (full, convId) => {
+          setCurrentConversation((c) => ({
+            conversationId: convId || c.conversationId,
+            messages: [
+              ...c.messages.filter((m) => m.role !== "assistant-stream"),
+              { role: "assistant", content: full },
+            ],
+          }));
+          clearImage();
+          loadConversationSummaries();
+          setLoading(false);
+        },
+        onError: (errMsg) => {
+          setError(errMsg);
+          setLoading(false);
+          clearImage();
+          // rollback optimistic
+          setCurrentConversation((c) => ({
+            ...c,
+            messages: c.messages.slice(0, -1),
+          }));
+        },
+      });
     } else {
       handleTextMessage();
     }
   };
 
-  // Debounced suggestions
-  const handleInputChange = (e, value, reason) => {
+  // — Debounced suggestions —
+  const handleInputChange = (event, value, reason) => {
     setInputText(value || "");
     if (debounceRef.current) clearTimeout(debounceRef.current);
+
     if (reason === "input" && value) {
       debounceRef.current = setTimeout(async () => {
         try {
@@ -319,22 +310,23 @@ export default function Chat() {
     }
   };
 
-  // Speech-to-text setup
+  // — Speech Recognition setup —
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechAPI) return;
-    const recog = new SpeechAPI();
-    recog.lang = "en-US";
-    recog.interimResults = true;
-    recog.onresult = (ev) => {
-      const t = ev.results[0][0].transcript;
-      if (ev.results[0].isFinal) {
-        setInputText(t);
-        handleSend();
-      }
-    };
-    setSpeechRecognition(recog);
+    if (SpeechAPI) {
+      const recog = new SpeechAPI();
+      recog.lang = "en-US";
+      recog.interimResults = true;
+      recog.onresult = (ev) => {
+        const t = ev.results[0][0].transcript;
+        if (ev.results[0].isFinal) {
+          setInputText(t);
+          handleSend();
+        }
+      };
+      setSpeechRecognition(recog);
+    }
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -351,7 +343,21 @@ export default function Chat() {
     }
   };
 
-  // Start a new conversation
+  const handlePauseResume = () => {
+    if (!("speechSynthesis" in window)) return;
+    if (isPaused) {
+      window.speechSynthesis.resume();
+      setPaused(false);
+    } else {
+      window.speechSynthesis.pause();
+      setPaused(true);
+    }
+  };
+
+  const handleLangChange = (e) => {
+    setLang(e.target.value);
+  };
+
   const startNew = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
@@ -359,12 +365,7 @@ export default function Chat() {
     if (!isMdUp) setMobileOpen(false);
   };
 
-  // Initial load
-  useEffect(() => {
-    if (auth?.isLoggedIn) loadConversationSummaries();
-  }, [auth?.isLoggedIn]);
-
-  // Sidebar JSX
+  // — Sidebar markup —
   const sidebarContent = (
     <Box
       sx={{
@@ -443,9 +444,8 @@ export default function Chat() {
                     noWrap: true,
                   }}
                   secondary={
-                    s.lastMessage?.content?.substring(0, 30) +
-                      (s.lastMessage?.content?.length > 30 ? "..." : "") ||
-                    "Empty conversation"
+                    (s.lastMessage?.content?.substring(0, 30) || "") +
+                    (s.lastMessage?.content?.length > 30 ? "..." : "")
                   }
                   secondaryTypographyProps={{
                     color: grey[300],
@@ -489,7 +489,8 @@ export default function Chat() {
           {sidebarContent}
         </Drawer>
       )}
-      {/* Sidebar */}
+
+      {/* Always show sidebar on md+ */}
       {isMdUp && sidebarContent}
 
       {/* Main Chat Panel */}
@@ -499,6 +500,7 @@ export default function Chat() {
           flexDirection: "column",
           flex: 1,
           px: { xs: 1, sm: 3 },
+          width: "100%",
           p: { xs: 1.5, sm: 2 },
         }}
       >
@@ -512,7 +514,6 @@ export default function Chat() {
           </IconButton>
         )}
 
-        {/* Header */}
         <Box
           sx={{
             display: "flex",
@@ -623,131 +624,140 @@ export default function Chat() {
               p: 1,
               bgcolor: "rgba(255,255,255,0.05)",
               borderRadius: 2,
-              position: "relative",
-            }}
-          >
-            <Typography variant="subtitle2" color={grey[300]} sx={{ mb: 1 }}>
-              Image Preview
-            </Typography>
-            <Box sx={{ display: "flex", alignItems: "center" }}>
-              <img
-                src={imagePreview}
-                alt="Preview"
-                style={{
-                  height: "60px",
-                  width: "60px",
-                  borderRadius: "4px",
-                  objectFit: "cover",
-                }}
-              />
-              <IconButton size="small" onClick={clearImage}>
-                <MdClose color={red[500]} />
-              </IconButton>
-            </Box>
-          </Box>
-        )}
+position: "relative",
+}}
+>
+<Typography
+variant="subtitle2"
+color={grey[300]}
+sx={{ mb: 1 }}
+>
+Image Preview
+</Typography>
+<Box sx={{ display: "flex", alignItems: "center" }}>
+<img
+src={imagePreview}
+alt="Preview"
+style={{
+height: "60px",
+width: "60px",
+borderRadius: "4px",
+objectFit: "cover",
+}}
+/>
+<IconButton size="small" onClick={clearImage}>
+<MdClose color={red[500]} />
+</IconButton>
+</Box>
+</Box>
+)}
 
-        {/* Input & Controls */}
-        <Box
+php-template
+Copy code
+    {/* Input & Controls */}
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        mt: 2,
+        gap: 1,
+        flexWrap: "wrap",
+      }}
+    >
+      <IconButton onClick={toggleSpeech} sx={{ color: teal[300] }}>
+        <MdMic
+          size={28}
+          color={isListening ? red[500] : teal[300]}
+        />
+      </IconButton>
+
+      <IconButton onClick={handlePauseResume} sx={{ color: teal[300] }}>
+        {isPaused ? <MdPlayArrow size={28} /> : <MdPause size={28} />}
+      </IconButton>
+
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel sx={{ color: grey[300] }}>Language</InputLabel>
+        <Select
+          value={lang}
+          label="Language"
+          onChange={handleLangChange}
           sx={{
-            display: "flex",
-            alignItems: "center",
-            mt: 2,
-            gap: 1,
-            flexWrap: "wrap",
+            color: "white",
+            ".MuiOutlinedInput-notchedOutline": {
+              borderColor: grey[700],
+            },
+            "&:hover .MuiOutlinedInput-notchedOutline": {
+              borderColor: teal[300],
+            },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+              borderColor: teal[300],
+            },
           }}
         >
-          <IconButton onClick={toggleSpeech} sx={{ color: teal[300] }}>
-            <MdMic size={28} color={isListening ? red[500] : teal[300]} />
-          </IconButton>
+          <MenuItem value="en-US">English (US)</MenuItem>
+          <MenuItem value="en-GB">English (UK)</MenuItem>
+          <MenuItem value="hi-IN">Hindi</MenuItem>
+          <MenuItem value="es-ES">Español</MenuItem>
+        </Select>
+      </FormControl>
 
-          <IconButton onClick={handlePauseResume} sx={{ color: teal[300] }}>
-            {isPaused ? <MdPlayArrow size={28} /> : <MdPause size={28} />}
-          </IconButton>
-
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel sx={{ color: grey[300] }}>Language</InputLabel>
-            <Select
-              value={lang}
-              label="Language"
-              onChange={handleLangChange}
-              sx={{
+      <Autocomplete
+        freeSolo
+        options={suggestions}
+        inputValue={inputText}
+        onInputChange={handleInputChange}
+        filterOptions={(opts) => opts}
+        sx={{
+          flex: 1,
+          background: "rgba(255,255,255,0.1)",
+          borderRadius: 3,
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            variant="filled"
+            placeholder="Type a message"
+            InputProps={{
+              ...params.InputProps,
+              disableUnderline: true,
+              sx: {
                 color: "white",
-                ".MuiOutlinedInput-notchedOutline": { borderColor: grey[700] },
-                "&:hover .MuiOutlinedInput-notchedOutline": {
-                  borderColor: teal[300],
-                },
-                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                  borderColor: teal[300],
-                },
-              }}
-            >
-              <MenuItem value="en-US">English (US)</MenuItem>
-              <MenuItem value="en-GB">English (UK)</MenuItem>
-              <MenuItem value="hi-IN">Hindi</MenuItem>
-              <MenuItem value="es-ES">Español</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Autocomplete
-            freeSolo
-            options={suggestions}
-            inputValue={inputText}
-            onInputChange={handleInputChange}
-            filterOptions={(opts) => opts}
-            sx={{
-              flex: 1,
-              background: "rgba(255,255,255,0.1)",
-              borderRadius: 3,
+                "&:focus": { borderColor: teal[300] },
+              },
             }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                variant="filled"
-                placeholder="Type a message"
-                InputProps={{
-                  ...params.InputProps,
-                  disableUnderline: true,
-                  sx: {
-                    color: "white",
-                    "&:focus": {
-                      borderColor: teal[300],
-                    },
-                  },
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !loading) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-              />
-            )}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !loading) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
           />
+        )}
+      />
 
-          <IconButton
-            onClick={() => fileInputRef.current.click()}
-            sx={{ color: teal[300] }}
-          >
-            <MdUploadFile size={28} />
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              style={{ display: "none" }}
-              onChange={handleFileChange}
-            />
-          </IconButton>
+      <IconButton
+        onClick={() => fileInputRef.current.click()}
+        sx={{ color: teal[300] }}
+      >
+        <MdUploadFile size={28} />
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+      </IconButton>
 
-          <IconButton
-            onClick={handleSend}
-            disabled={loading || (!inputText.trim() && !imageFile)}
-            sx={{ color: teal[300] }}
-          >
-            <MdSend size={28} />
-          </IconButton>
-        </Box>
-      </Box>
+      <IconButton
+        onClick={handleSend}
+        disabled={loading || (!inputText.trim() && !imageFile)}
+        sx={{ color: teal[300] }}
+      >
+        <MdSend size={28} />
+      </IconButton>
     </Box>
-  );
+  </Box>
+</Box>
+);
 }
