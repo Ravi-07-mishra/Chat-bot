@@ -50,10 +50,11 @@ export const sendChat = async ({ message, conversationId, image }) => {
 
 // ————— Streaming chat (SSE) —————
 export function streamChat({ message, conversationId, image, onChunk, onDone, onError }) {
-  if (!message?.trim() && !image) {
+  if ((!message || !message.trim()) && !image) {
     onError('Message or image is required');
     return;
   }
+
   const token = getCookie('bot_token');
   const payload = {
     message: message?.trim() || '',
@@ -80,32 +81,51 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
         throw new Error(err.message || `Error ${res.status}`);
       }
 
-      // SSE parser
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
+      let currentEvent = null;
 
       const processBuffer = () => {
-        const events = buffer.split('\n\n');
-        events.slice(0, -1).forEach((evt) => {
-          const dataLine = evt.split('\n').find((l) => l.startsWith('data: '));
-          if (!dataLine) return;
-          try {
-            const payload = JSON.parse(dataLine.replace(/^data:\s*/, ''));
-            if (payload.part) onChunk(payload.part);
-            if (payload.text) onDone(payload.text, payload.conversationId);
-          } catch {}
+        // Keep splitting on the double newline that terminates an SSE frame
+        const parts = buffer.split('\n\n');
+        // Process all complete frames (all but last)
+        parts.slice(0, -1).forEach((frame) => {
+          const lines = frame.split('\n');
+          lines.forEach((line) => {
+            if (line.startsWith('event:')) {
+              currentEvent = line.replace('event:', '').trim();
+            }
+            if (line.startsWith('data:')) {
+              try {
+                const data = JSON.parse(line.replace(/^data:\s*/, ''));
+                if (currentEvent === 'chunk' && data.part) {
+                  onChunk(data.part);
+                }
+                if (currentEvent === 'done' && data.text) {
+                  onDone(data.text, data.conversationId);
+                }
+              } catch {
+                // ignore JSON parse errors
+              }
+            }
+          });
+          currentEvent = null;
         });
-        buffer = events[events.length - 1];
+        // Save last (possibly incomplete) chunk back to buffer
+        buffer = parts[parts.length - 1];
       };
 
-      const read = () =>
+      const readLoop = () =>
         reader.read().then(({ done, value }) => {
           if (done) {
+            // Process any remaining buffer as a final 'done'
             if (buffer.trim()) {
               try {
-                const last = JSON.parse(buffer);
-                onDone(last.text, last.conversationId);
+                const data = JSON.parse(buffer.replace(/^data:\s*/, ''));
+                if (data.text) {
+                  onDone(data.text, data.conversationId);
+                }
               } catch {
                 onError('Invalid SSE response');
               }
@@ -114,10 +134,10 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
           }
           buffer += decoder.decode(value, { stream: true });
           processBuffer();
-          read();
+          return readLoop();
         });
 
-      read();
+      return readLoop();
     })
     .catch((err) => {
       if (err.message === 'Unauthorized') {

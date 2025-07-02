@@ -195,41 +195,59 @@ export default function Chat() {
   };
 
   // — Send text-only message (fallback) —
-  const handleTextMessage = async () => {
-    const text = inputText.trim();
-    if (!text) return;
-    setInputText("");
-    setLoading(true);
-    setError(null);
+ const handleTextMessage = () => {
+  const text = inputText.trim();
+  if (!text) return;
 
-    // optimistic UI
-    setCurrentConversation((c) => ({
-      ...c,
-      messages: [...c.messages, { role: "user", content: text }],
-    }));
+  setInputText("");
+  setLoading(true);
+  setError(null);
 
-    try {
-      const args = { message: text };
-      if (currentConversation.conversationId) {
-        args.conversationId = currentConversation.conversationId;
-      }
-      const result = await sendChat(args);
-      setCurrentConversation({
-        conversationId: result.conversation.conversationId,
-        messages: [...result.conversation.messages],
-      });
-      await loadConversationSummaries();
-    } catch (err) {
-      setError(err.message || "Request failed");
-      // rollback
-      setCurrentConversation((c) => ({
+  // 1) Optimistic UI: append the user message immediately
+  setCurrentConversation(c => ({
+    ...c,
+    messages: [...c.messages, { role: "user", content: text }]
+  }));
+
+  let buffer = "";
+
+  // 2) Stream the chat
+  streamChat({
+    message: text,
+    conversationId: currentConversation.conversationId,
+    onChunk: (part) => {
+      buffer += part;
+      setCurrentConversation(c => ({
         ...c,
-        messages: c.messages.slice(0, -1),
+        // remove any previous streaming placeholder and append new one
+        messages: [
+          ...c.messages.filter(m => m.role !== "assistant-stream"),
+          { role: "assistant-stream", content: buffer }
+        ]
       }));
-    } finally {
+    },
+    onDone: (fullText, convId) => {
+      setCurrentConversation(c => ({
+        conversationId: convId || c.conversationId,
+        messages: [
+          ...c.messages.filter(m => m.role !== "assistant-stream"),
+          { role: "assistant", content: fullText }
+        ]
+      }));
       setLoading(false);
+      loadConversationSummaries();
+    },
+    onError: (errMsg) => {
+      setError(errMsg);
+      setLoading(false);
+      // roll back the optimistic user message
+      setCurrentConversation(c => ({
+        ...c,
+        messages: c.messages.slice(0, -1)
+      }));
     }
-  };
+  });
+};
 
   // — Unified send handler (text vs. image) —
   const handleSend = () => {

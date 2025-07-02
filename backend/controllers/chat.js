@@ -278,12 +278,12 @@ async function processImageUpload(imageBase64, conversation, userMessage = '') {
     return true;
   }
 }
-
 async function streamChat(req, res) {
+  // 1) Setup SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+    Connection: 'keep-alive',
   });
   res.write('\n');
 
@@ -292,11 +292,13 @@ async function streamChat(req, res) {
     const userMessage = message?.trim();
     const userImage = image;
 
+    // 2) Validate
     if (!userMessage && !userImage) {
       res.write(`event: error\ndata:${JSON.stringify({ error: 'Message or image required' })}\n\n`);
       return res.end();
     }
 
+    // 3) Load user and conversation
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
       res.write(`event: error\ndata:${JSON.stringify({ error: 'Invalid user' })}\n\n`);
@@ -304,7 +306,7 @@ async function streamChat(req, res) {
     }
 
     let conv = conversationId
-      ? user.conversations.find((c) => c.conversationId === conversationId)
+      ? user.conversations.find(c => c.conversationId === conversationId)
       : null;
     if (!conv) {
       conv = user.conversations.create({
@@ -315,68 +317,56 @@ async function streamChat(req, res) {
       user.conversations.push(conv);
     }
 
-    conv.messages.push({ 
-      role: 'user', 
-      content: userMessage,
-      image: userImage 
-    });
+    // 4) Save user message
+    conv.messages.push({ role: 'user', content: userMessage, image: userImage });
     await user.save();
 
+    // 5) Image-only short‑circuit
     if (userImage) {
-      const result = await processImageUpload(userImage, conv, userMessage);
-      if (result) {
-        const lastMessage = conv.messages[conv.messages.length - 1];
-        res.write(`event: chunk\ndata:${JSON.stringify({ part: lastMessage.content })}\n\n`);
-        res.write(`event: done\ndata:${JSON.stringify({ 
-          text: lastMessage.content, 
-          conversationId: conv.conversationId 
-        })}\n\n`);
+      const ok = await processImageUpload(userImage, conv, userMessage);
+      if (ok) {
+        const last = conv.messages[conv.messages.length - 1].content;
+        res.write(`event: chunk\ndata:${JSON.stringify({ part: last })}\n\n`);
+        res.write(`event: done\ndata:${JSON.stringify({ text: last, conversationId: conv.conversationId })}\n\n`);
         return res.end();
       }
     }
 
+    // 6) Live-data trigger (weather/news/sports)
+    const triggers = { weather: ['weather','forecast'], news: ['news','headlines'], sports: ['sports','score','match'] };
     let liveData = [];
-    const queryTriggers = {
-      weather: ['weather', 'forecast'],
-      news: ['news', 'headlines'],
-      sports: ['sports', 'score', 'game', 'match'],
-    };
-
-    for (const [category, triggers] of Object.entries(queryTriggers)) {
-      if (triggers.some(trigger => userMessage.toLowerCase().includes(trigger))) {
+    for (const ts of Object.values(triggers)) {
+      if (ts.some(t => userMessage.toLowerCase().includes(t))) {
         liveData = await fetchLiveData(userMessage);
         break;
       }
     }
-
-    if (liveData.length > 0) {
-      const transformedData = transformToGeminiFormat(liveData);
-      const liveMessage = `I found these results for "${userMessage}":\n${formatLiveData(userMessage, transformedData)}`;
-
-      conv.messages.push({ role: 'assistant', content: liveMessage });
+    if (liveData.length) {
+      const transformed = transformToGeminiFormat(liveData);
+      const liveMsg = `I found these results for "${userMessage}":\n${formatLiveData(userMessage, transformed)}`;
+      conv.messages.push({ role: 'assistant', content: liveMsg });
       await user.save();
 
-      res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMessage })}\n\n`);
-      res.write(`event: done\ndata:${JSON.stringify({ text: liveMessage, conversationId: conv.conversationId })}\n\n`);
+      res.write(`event: chunk\ndata:${JSON.stringify({ part: liveMsg })}\n\n`);
+      res.write(`event: done\ndata:${JSON.stringify({ text: liveMsg, conversationId: conv.conversationId })}\n\n`);
       return res.end();
+    }
+
+    // 7) Build prompt (with summary if needed)
+    if (conv.messages.length > 20) {
+      const old = conv.messages.splice(0, 10);
+      const summary = await summarizeMessages(old);
+      conv.summary = [conv.summary, summary].filter(Boolean).join('\n');
     }
 
     const contents = [];
     if (conv.summary) {
-      contents.push({
-        role: 'system',
-        parts: [{ text: `Summary:\n${conv.summary}` }],
-      });
+      contents.push({ role: 'system', parts: [{ text: `Summary:\n${conv.summary}` }] });
     }
+    conv.messages.forEach(m => contents.push({ role: m.role, parts: buildMessageParts(m) }));
 
-    conv.messages.forEach(m => {
-      contents.push({
-        role: m.role,
-        parts: buildMessageParts(m)
-      });
-    });
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // 8) Stream from Gemini
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
     const stream = await model.generateContentStream({ contents });
 
     let buffer = '';
@@ -386,18 +376,20 @@ async function streamChat(req, res) {
       res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
     }
 
+    // 9) Finalize
     const finalText = buffer.trim();
     conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
-
     res.write(`event: done\ndata:${JSON.stringify({ text: finalText, conversationId: conv.conversationId })}\n\n`);
     res.end();
+
   } catch (err) {
     console.error('Stream error:', err);
     res.write(`event: error\ndata:${JSON.stringify({ error: err.message || 'Stream failed' })}\n\n`);
     res.end();
   }
 }
+
 
 async function handleUpload(req, res) {
   let imageBase64;
