@@ -407,7 +407,7 @@ async function handleUpload(req, res) {
     const data = fs.readFileSync(req.file.path, { encoding: 'base64' });
     imageBase64 = `data:${mimeType};base64,${data}`;
     fs.unlinkSync(req.file.path);
-  } else if (req.body.image) { // FIXED: Changed from imageBase64 to image
+  } else if (req.body.image) {
     imageBase64 = req.body.image;
   } else {
     return res.status(400).json({ message: 'Image (file or base64) required' });
@@ -415,18 +415,18 @@ async function handleUpload(req, res) {
 
   const userMessage = (req.body.message || 'Please describe this image.').trim();
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  });
-  res.write('\n');
+  // Set SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
 
   try {
     const user = await User.findById(res.locals.jwtData.id);
     if (!user) {
-      res.write(`event: error\ndata:${JSON.stringify({ error: 'Invalid user' })}\n\n`);
-      return res.end();
+      res.write(`event: error\ndata: ${JSON.stringify({ error: 'Invalid user' })}\n\n`);
+      res.end();
+      return;
     }
 
     let conv = req.body.conversationId
@@ -478,21 +478,28 @@ async function handleUpload(req, res) {
     for await (const chunk of stream.stream) {
       const part = chunk.text() || '';
       buffer += part;
-      res.write(`event: chunk\ndata:${JSON.stringify({ part })}\n\n`);
+      
+      // Send chunk event
+      res.write(`event: chunk\n`);
+      res.write(`data: ${JSON.stringify({ part })}\n\n`);
+      res.flush(); // Ensure data is sent immediately
     }
 
     const finalText = buffer.trim();
     conv.messages.push({ role: 'assistant', content: finalText });
     await user.save();
 
-    res.write(`event: done\ndata:${JSON.stringify({
+    // Send completion event
+    res.write(`event: done\n`);
+    res.write(`data: ${JSON.stringify({
       text: finalText,
       conversationId: conv.conversationId,
     })}\n\n`);
     res.end();
   } catch (err) {
     console.error('handleUpload error:', err);
-    res.write(`event: error\ndata:${JSON.stringify({ error: err.message })}\n\n`);
+    res.write(`event: error\n`);
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
     res.end();
   }
 }

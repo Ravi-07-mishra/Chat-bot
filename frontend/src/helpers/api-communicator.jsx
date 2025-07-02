@@ -1,6 +1,6 @@
 // src/api/chat.js
 import api from '../api';
-
+import { EventSourcePolyfill } from 'event-source-polyfill';
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -132,65 +132,93 @@ export function uploadFile({ file, text, conversationId, onChunk, onDone, onErro
   if (!(file instanceof Blob)) {
     return onError('uploadFile error: Expected a File or Blob');
   }
+  
   const reader = new FileReader();
   reader.onload = () => {
-    const base64 = reader.result; // "data:image/…;base64,…"
+    const base64 = reader.result;
+    const token = getCookie('bot_token');
+    
     fetch(`${import.meta.env.VITE_API_URL}/chat/upload`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
       credentials: 'include',
-      body: JSON.stringify({ image: base64, text, conversationId }),
+      body: JSON.stringify({ 
+        image: base64, 
+        text: text || '', 
+        conversationId 
+      }),
     })
-      .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.message || `Upload failed: ${res.status}`);
-        }
-        // Reuse SSE parsing from streamChat
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder('utf-8');
-        let buffer = '';
-
-        const processBuffer = () => {
-          const events = buffer.split('\n\n');
-          events.slice(0, -1).forEach((evt) => {
-            const dataLine = evt.split('\n').find((l) => l.startsWith('data: '));
-            if (!dataLine) return;
-            try {
-              const payload = JSON.parse(dataLine.replace(/^data:\s*/, ''));
-              if (payload.part) onChunk(payload.part);
-              if (payload.text) onDone(payload.text, payload.conversationId);
-            } catch {}
-          });
-          buffer = events[events.length - 1];
-        };
-
-        const read = () =>
-          reader.read().then(({ done, value }) => {
-            if (done) {
-              if (buffer.trim()) {
-                try {
-                  const last = JSON.parse(buffer);
-                  onDone(last.text, last.conversationId);
-                } catch {
-                  onError('Invalid SSE in upload');
-                }
-              }
-              return;
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.status}`);
+      }
+      
+      // Check for SSE content type
+      const contentType = response.headers.get('Content-Type');
+      if (!contentType || !contentType.includes('text/event-stream')) {
+        throw new Error('Invalid response format');
+      }
+      
+      // Setup SSE parser
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      
+      const processEvents = () => {
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        
+        for (const event of events) {
+          const [typeLine, dataLine] = event.split('\n');
+          const type = typeLine.replace('event: ', '').trim();
+          const data = dataLine ? dataLine.replace('data: ', '') : null;
+          
+          try {
+            const payload = data ? JSON.parse(data) : {};
+            
+            switch (type) {
+              case 'chunk':
+                if (payload.part) onChunk(payload.part);
+                break;
+              case 'done':
+                if (payload.text) onDone(payload.text, payload.conversationId);
+                break;
+              case 'error':
+                if (payload.error) onError(payload.error);
+                break;
+              default:
+                console.warn('Unknown SSE event type:', type);
             }
-            buffer += decoder.decode(value, { stream: true });
-            processBuffer();
-            read();
-          });
-
-        read();
-      })
-      .catch((err) => onError(err.message));
+          } catch (err) {
+            console.error('Error parsing SSE event:', err);
+          }
+        }
+      };
+      
+      const readChunk = () => {
+        reader.read().then(({ value, done }) => {
+          if (done) {
+            if (buffer) processEvents();
+            return;
+          }
+          
+          buffer += decoder.decode(value, { stream: true });
+          processEvents();
+          readChunk();
+        }).catch(err => onError(err.message));
+      };
+      
+      readChunk();
+    })
+    .catch(err => onError(err.message));
   };
-  reader.onerror = () => onError('Failed to read the image file.');
+  
+  reader.onerror = () => onError('Failed to read image');
   reader.readAsDataURL(file);
 }
-
 // ————— Suggestions —————
 export const getSuggestions = async (prefix) => {
   const res = await api.post('/chat/suggest', { prefix });
