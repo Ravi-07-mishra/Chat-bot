@@ -319,23 +319,49 @@ async function deleteConversation(req, res) {
   res.json({ message: 'Deleted' });
 }
 
+// controllers/chat.js
 async function getSuggestions(req, res) {
   const { prefix } = req.body;
-  if (!prefix || prefix.length < 2) return res.json({ suggestions: [] });
+  if (!prefix || prefix.length < 2) {
+    return res.json({ suggestions: [] });
+  }
 
   try {
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.0-flash',
       generationConfig: { temperature: 0.3, maxOutputTokens: 60 },
     });
-    const prompt = `Suggest 5 completions for: "${prefix}" (JSON array only)`;
+    const prompt = `Suggest 5 completions for: "${prefix}" (respond with a JSON array only)`;
     const result = await generateWithRetry(model, {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
 
     let text = result.response.candidates[0].content.parts[0].text || '';
-    text = text.replace(/^```json\s*|\s*```$/g, '').trim().replace(/,\s*]$/, ']');
-    const suggestions = JSON.parse(text);
+
+    // strip code fences
+    text = text.replace(/^```json\s*|\s*```$/g, '').trim();
+
+    let suggestions = [];
+    try {
+      // direct parse
+      suggestions = JSON.parse(text);
+    } catch {
+      // fallback: extract the JSON array substring
+      const m = text.match(/\[.*\]/s);
+      if (m) {
+        try {
+          suggestions = JSON.parse(m[0]);
+        } catch {
+          // last‐ditch: split on lines/commas
+          suggestions = m[0]
+            .replace(/^\[|\]$/g, '')
+            .split(',')
+            .map(s => s.replace(/^["'\s]+|["'\s]+$/g, '').trim())
+            .filter(Boolean);
+        }
+      }
+    }
+
     return res.json({ suggestions });
   } catch (err) {
     console.warn('getSuggestions error:', err);

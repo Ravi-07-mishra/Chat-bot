@@ -22,9 +22,14 @@ import {
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { red, teal, grey } from "@mui/material/colors";
-import { 
-  MdSend, MdMic, MdUploadFile, MdMenu, 
-  MdPause, MdPlayArrow, MdClose
+import {
+  MdSend,
+  MdMic,
+  MdUploadFile,
+  MdMenu,
+  MdPause,
+  MdPlayArrow,
+  MdClose,
 } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
@@ -39,7 +44,7 @@ import {
   uploadFile,
   getSuggestions,
   deleteConversation,
-  sendChat
+  sendChat,
 } from "../helpers/api-communicator";
 
 export default function Chat() {
@@ -52,6 +57,7 @@ export default function Chat() {
   const chatContainerRef = useRef(null);
   const debounceRef = useRef(null);
 
+  // Component state
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentConversation, setCurrentConversation] = useState({
     conversationId: null,
@@ -64,19 +70,22 @@ export default function Chat() {
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [error, setError] = useState(null);
   const [isListening, setIsListening] = useState(false);
-  const [speechRecognition, setSpeechRecognition] = useState(null);
-  const [image, setImage] = useState(null);
 
-  // Speech Synthesis States & Handlers
+  // For image upload
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+
+  // Speech Synthesis States
   const [lang, setLang] = useState("en-US");
   const [isPaused, setPaused] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState(null);
 
-  const handleLangChange = (e) => {
-    setLang(e.target.value);
-  };
+  // Handle language change
+  const handleLangChange = (e) => setLang(e.target.value);
 
+  // Pause/resume speech
   const handlePauseResume = () => {
-    if (!("speechSynthesis" in window)) return;
+    if (!window.speechSynthesis) return;
     if (isPaused) {
       window.speechSynthesis.resume();
       setPaused(false);
@@ -86,18 +95,17 @@ export default function Chat() {
     }
   };
 
-  // Speak the latest assistant message
+  // Speak assistant's last message
   useEffect(() => {
     const msgs = currentConversation.messages;
-    if (msgs.length === 0) return;
-
+    if (msgs.length === 0 || !window.speechSynthesis) return;
     const last = msgs[msgs.length - 1];
-    if (last.role === "assistant" && "speechSynthesis" in window) {
+    if (last.role === "assistant") {
       window.speechSynthesis.cancel();
       setPaused(false);
-      const utterance = new SpeechSynthesisUtterance(last.content);
-      utterance.lang = lang;
-      window.speechSynthesis.speak(utterance);
+      const utt = new SpeechSynthesisUtterance(last.content);
+      utt.lang = lang;
+      window.speechSynthesis.speak(utt);
     }
   }, [currentConversation.messages, lang]);
 
@@ -106,14 +114,14 @@ export default function Chat() {
     if (auth?.isLoggedIn === false) navigate("/login");
   }, [auth?.isLoggedIn, navigate]);
 
-  // Auto-scroll on new messages or loading
+  // Auto-scroll
   useEffect(() => {
     if (chatContainerRef.current) {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [currentConversation.messages, loading]);
 
-  // Load all conversation summaries
+  // Load conversation summaries
   const loadConversationSummaries = async () => {
     setLoadingConversations(true);
     setError(null);
@@ -127,7 +135,7 @@ export default function Chat() {
     }
   };
 
-  // Load a specific conversation
+  // Load one conversation
   const loadConversation = async (id) => {
     setLoading(true);
     setError(null);
@@ -162,170 +170,141 @@ export default function Chat() {
 
   // Handle file selection
   const handleFileChange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  if (!file.type.match('image.*')) {
-    setError('Please select an image file');
-    return;
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    setError('Image size should be less than 5MB');
-    return;
-  }
-
-  setImageFile(file);  // ✅ store actual file for uploading
-  setImagePreview(URL.createObjectURL(file)); // ✅ store preview URL for UI display
-};
-
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.match("image.*")) {
+      setError("Please select an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size should be less than 5MB");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
 
   // Clear selected image
- const clearImage = () => {
-  setImageFile(null);
-  setImagePreview(null);
-  if (fileInputRef.current) fileInputRef.current.value = '';
-};
+  const clearImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
-
+  // Send a text-only message
   const handleTextMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
-
     setInputText("");
     setLoading(true);
     setError(null);
 
-    // Optimistic UI update
-    setCurrentConversation(c => ({
+    // Optimistic UI
+    setCurrentConversation((c) => ({
       ...c,
-      messages: [...c.messages, { role: "user", content: text }]
+      messages: [...c.messages, { role: "user", content: text }],
     }));
 
     try {
-      // only include conversationId when it exists
       const args = { message: text };
       if (currentConversation.conversationId) {
         args.conversationId = currentConversation.conversationId;
       }
-
       const result = await sendChat(args);
-
-      // Replace messages with server‑authoritative conversation
       setCurrentConversation({
         conversationId: result.conversation.conversationId,
-        messages: [...result.conversation.messages]
+        messages: [...result.conversation.messages],
       });
-
       await loadConversationSummaries();
     } catch (err) {
       setError(err.message || "Request failed");
-      // Roll back optimistic update
-      setCurrentConversation(c => ({
+      // Roll back
+      setCurrentConversation((c) => ({
         ...c,
-        messages: c.messages.slice(0, -1)
+        messages: c.messages.slice(0, -1),
       }));
     } finally {
       setLoading(false);
     }
   };
 
-
-  // Handle file upload with streaming
- const handleFileUpload = () => {
-  // 1️⃣ Make sure we actually have a File/Blob
-  const file = image;
-  if (!(file instanceof Blob)) {
-    const msg = "Please select an actual image file to upload.";
-    console.error(msg, file);
-    setError(msg);
-    return;
-  }
-
-  const text = inputText.trim();
-
-  // 2️⃣ Clear input & start loading
-  setInputText("");
-  setLoading(true);
-  setError(null);
-
-  // 3️⃣ Optimistic UI: add the user’s image + text
-  const userMessage = {
-    role: "user",
-    content: text,
-    image: URL.createObjectURL(file)  // or however you preview it
-  };
-  setCurrentConversation(c => ({
-    ...c,
-    messages: [...c.messages, userMessage],
-  }));
-
-  // 4️⃣ Stream buffer for assistant
-  let buffer = "";
-
-  uploadFile({
-    file,               // <- guaranteed to be a Blob/File
-    text,              
-    // only include if defined
-    conversationId: currentConversation.conversationId || undefined,
-    onChunk: (part) => {
-      buffer += part;
-      setCurrentConversation(c => ({
-        ...c,
-        messages: [
-          ...c.messages.filter(m => m.role !== "assistant-stream"),
-          { role: "assistant-stream", content: buffer }
-        ]
-      }));
-    },
-    onDone: (full, convId) => {
-      setCurrentConversation(c => ({
-        conversationId: convId || c.conversationId,
-        messages: [
-          ...c.messages.filter(m => m.role !== "assistant-stream"),
-          { role: "assistant", content: full }
-        ]
-      }));
-      loadConversationSummaries();
-      setLoading(false);
-      clearImage();       // reset your image picker state
-    },
-    onError: (errMsg) => {
-      console.error("uploadFile error", errMsg);
-      setError(errMsg);
-      setLoading(false);
-      clearImage();
-      // remove the last optimistic user message
-      setCurrentConversation(c => ({
-        ...c,
-        messages: c.messages.slice(0, -1)
-      }));
+  // Handle image upload + streaming
+  const handleFileUpload = () => {
+    if (!(imageFile instanceof Blob)) {
+      setError("Please select an image file to upload.");
+      return;
     }
-  });
-};
+    const text = inputText.trim();
+    setInputText("");
+    setLoading(true);
+    setError(null);
 
+    // Optimistic UI: show user image
+    const userMsg = {
+      role: "user",
+      content: text,
+      image: imagePreview,
+    };
+    setCurrentConversation((c) => ({
+      ...c,
+      messages: [...c.messages, userMsg],
+    }));
 
-  // Send message (handles both text and images)
-const handleSend = () => {
-  if (imageFile) {
+    let buffer = "";
     uploadFile({
-      file: imageFile, // ✅ send the actual file
+      file: imageFile,
       text,
-      conversationId,
-      onChunk: handleChunk,
-      onDone: handleDone,
-      onError: handleError,
+      conversationId: currentConversation.conversationId || undefined,
+      onChunk: (part) => {
+        buffer += part;
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: [
+            ...c.messages.filter((m) => m.role !== "assistant-stream"),
+            { role: "assistant-stream", content: buffer },
+          ],
+        }));
+      },
+      onDone: (full, convId) => {
+        setCurrentConversation({
+          conversationId: convId || currentConversation.conversationId,
+          messages: [
+            ...currentConversation.messages.filter(
+              (m) => m.role !== "assistant-stream"
+            ),
+            { role: "assistant", content: full },
+          ],
+        });
+        loadConversationSummaries();
+        setLoading(false);
+        clearImage();
+      },
+      onError: (msg) => {
+        setError(msg);
+        setLoading(false);
+        clearImage();
+        // rollback
+        setCurrentConversation((c) => ({
+          ...c,
+          messages: c.messages.slice(0, -1),
+        }));
+      },
     });
-  } else {
-    handleTextMessage(); // fallback for text-only
-  }
-};
+  };
 
-  // Debounced suggestions fetch
-  const handleInputChange = (event, value, reason) => {
+  // Unified send handler
+  const handleSend = () => {
+    if (imageFile) {
+      handleFileUpload();
+    } else {
+      handleTextMessage();
+    }
+  };
+
+  // Debounced suggestions
+  const handleInputChange = (e, value, reason) => {
     setInputText(value || "");
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     if (reason === "input" && value) {
       debounceRef.current = setTimeout(async () => {
         try {
@@ -340,23 +319,22 @@ const handleSend = () => {
     }
   };
 
-  // Web Speech API setup
+  // Speech-to-text setup
   useEffect(() => {
     const SpeechAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechAPI) {
-      const recog = new SpeechAPI();
-      recog.lang = "en-US";
-      recog.interimResults = true;
-      recog.onresult = (ev) => {
-        const t = ev.results[0][0].transcript;
-        if (ev.results[0].isFinal) {
-          setInputText(t);
-          handleSend();
-        }
-      };
-      setSpeechRecognition(recog);
-    }
+    if (!SpeechAPI) return;
+    const recog = new SpeechAPI();
+    recog.lang = "en-US";
+    recog.interimResults = true;
+    recog.onresult = (ev) => {
+      const t = ev.results[0][0].transcript;
+      if (ev.results[0].isFinal) {
+        setInputText(t);
+        handleSend();
+      }
+    };
+    setSpeechRecognition(recog);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -373,22 +351,20 @@ const handleSend = () => {
     }
   };
 
-  // Start new conversation
+  // Start a new conversation
   const startNew = () => {
     setCurrentConversation({ conversationId: null, messages: [] });
     setError(null);
-    setImage(null);
+    clearImage();
     if (!isMdUp) setMobileOpen(false);
   };
 
   // Initial load
   useEffect(() => {
-    if (auth?.isLoggedIn) {
-      loadConversationSummaries();
-    }
+    if (auth?.isLoggedIn) loadConversationSummaries();
   }, [auth?.isLoggedIn]);
 
-  // Sidebar content
+  // Sidebar JSX
   const sidebarContent = (
     <Box
       sx={{
@@ -417,7 +393,7 @@ const handleSend = () => {
       </Button>
 
       {loadingConversations ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        <Box sx={{ display: "flex", justifyContent: "center" }}>
           <CircularProgress size={24} sx={{ color: "white" }} />
         </Box>
       ) : conversationSummaries.length === 0 ? (
@@ -425,12 +401,12 @@ const handleSend = () => {
           No conversations found
         </Typography>
       ) : (
-        <List sx={{ overflowY: 'auto' }}>
+        <List sx={{ overflowY: "auto" }}>
           {conversationSummaries.map((s) => {
             const isActive =
               s.conversationId === currentConversation.conversationId;
             return (
-              <ListItem 
+              <ListItem
                 key={s.conversationId}
                 onClick={() => loadConversation(s.conversationId)}
                 sx={{
@@ -459,17 +435,21 @@ const handleSend = () => {
                     {(s.title || "?")[0].toUpperCase()}
                   </Avatar>
                 </ListItemAvatar>
-                <ListItemText 
+                <ListItemText
                   primary={s.title || "New Conversation"}
-                  primaryTypographyProps={{ 
+                  primaryTypographyProps={{
                     color: "white",
                     fontWeight: 500,
-                    noWrap: true
+                    noWrap: true,
                   }}
-                  secondary={s.lastMessage?.content?.substring(0, 30) + (s.lastMessage?.content?.length > 30 ? '...' : '') || "Empty conversation"}
-                  secondaryTypographyProps={{ 
+                  secondary={
+                    s.lastMessage?.content?.substring(0, 30) +
+                      (s.lastMessage?.content?.length > 30 ? "..." : "") ||
+                    "Empty conversation"
+                  }
+                  secondaryTypographyProps={{
                     color: grey[300],
-                    noWrap: true
+                    noWrap: true,
                   }}
                 />
                 <IconButton
@@ -491,7 +471,7 @@ const handleSend = () => {
   );
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", bgcolor: 'rgb(7, 15, 25)' }}>
+    <Box sx={{ display: "flex", height: "100vh", bgcolor: "rgb(7, 15, 25)" }}>
       {/* Drawer for small screens */}
       {!isMdUp && (
         <Drawer
@@ -502,15 +482,14 @@ const handleSend = () => {
             "& .MuiDrawer-paper": {
               width: "80%",
               boxSizing: "border-box",
-              bgcolor: 'rgb(7, 15, 25)'
+              bgcolor: "rgb(7, 15, 25)",
             },
           }}
         >
           {sidebarContent}
         </Drawer>
       )}
-
-      {/* Always show sidebar on md+ */}
+      {/* Sidebar */}
       {isMdUp && sidebarContent}
 
       {/* Main Chat Panel */}
@@ -520,11 +499,10 @@ const handleSend = () => {
           flexDirection: "column",
           flex: 1,
           px: { xs: 1, sm: 3 },
-          width: "100%",
           p: { xs: 1.5, sm: 2 },
         }}
       >
-        {/* Menu button for small screens */}
+        {/* Menu button */}
         {!isMdUp && (
           <IconButton
             onClick={() => setMobileOpen(true)}
@@ -534,6 +512,7 @@ const handleSend = () => {
           </IconButton>
         )}
 
+        {/* Header */}
         <Box
           sx={{
             display: "flex",
@@ -560,7 +539,9 @@ const handleSend = () => {
               startIcon={<DeleteIcon />}
               variant="outlined"
               color="error"
-              onClick={() => handleDelete(currentConversation.conversationId)}
+              onClick={() =>
+                handleDelete(currentConversation.conversationId)
+              }
               disabled={loadingConversations}
               size="small"
             >
@@ -590,17 +571,19 @@ const handleSend = () => {
               {error}
             </Typography>
           )}
-          
+
           {currentConversation.messages.length === 0 ? (
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              height: '100%',
-              flexDirection: 'column',
-              textAlign: 'center',
-              color: grey[400]
-            }}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                height: "100%",
+                flexDirection: "column",
+                textAlign: "center",
+                color: grey[400],
+              }}
+            >
               <Typography variant="h6" sx={{ mb: 2 }}>
                 Start a new conversation
               </Typography>
@@ -613,7 +596,7 @@ const handleSend = () => {
               <Chatitem key={i} message={msg} />
             ))
           )}
-          
+
           {loading && (
             <Box
               sx={{
@@ -633,33 +616,31 @@ const handleSend = () => {
         </Box>
 
         {/* Image Preview */}
-        {image && (
-          <Box sx={{ 
-            mt: 2, 
-            p: 1, 
-            bgcolor: 'rgba(255,255,255,0.05)', 
-            borderRadius: 2,
-            position: 'relative'
-          }}>
+        {imagePreview && (
+          <Box
+            sx={{
+              mt: 2,
+              p: 1,
+              bgcolor: "rgba(255,255,255,0.05)",
+              borderRadius: 2,
+              position: "relative",
+            }}
+          >
             <Typography variant="subtitle2" color={grey[300]} sx={{ mb: 1 }}>
               Image Preview
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <img 
-                src={image} 
-                alt="Preview" 
-                style={{ 
-                  height: '60px', 
-                  width: '60px',
-                  borderRadius: '4px',
-                  objectFit: 'cover'
-                }} 
+            <Box sx={{ display: "flex", alignItems: "center" }}>
+              <img
+                src={imagePreview}
+                alt="Preview"
+                style={{
+                  height: "60px",
+                  width: "60px",
+                  borderRadius: "4px",
+                  objectFit: "cover",
+                }}
               />
-              <IconButton
-                size="small"
-                onClick={clearImage}
-                sx={{ ml: 1 }}
-              >
+              <IconButton size="small" onClick={clearImage}>
                 <MdClose color={red[500]} />
               </IconButton>
             </Box>
@@ -676,21 +657,14 @@ const handleSend = () => {
             flexWrap: "wrap",
           }}
         >
-          {/* mic (speech-to-text) */}
           <IconButton onClick={toggleSpeech} sx={{ color: teal[300] }}>
             <MdMic size={28} color={isListening ? red[500] : teal[300]} />
           </IconButton>
 
-          {/* play/pause assistant voice */}
           <IconButton onClick={handlePauseResume} sx={{ color: teal[300] }}>
-            {isPaused ? (
-              <MdPlayArrow size={28} />
-            ) : (
-              <MdPause size={28} />
-            )}
+            {isPaused ? <MdPlayArrow size={28} /> : <MdPause size={28} />}
           </IconButton>
 
-          {/* language selector */}
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel sx={{ color: grey[300] }}>Language</InputLabel>
             <Select
@@ -700,8 +674,12 @@ const handleSend = () => {
               sx={{
                 color: "white",
                 ".MuiOutlinedInput-notchedOutline": { borderColor: grey[700] },
-                "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: teal[300] },
-                "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: teal[300] },
+                "&:hover .MuiOutlinedInput-notchedOutline": {
+                  borderColor: teal[300],
+                },
+                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                  borderColor: teal[300],
+                },
               }}
             >
               <MenuItem value="en-US">English (US)</MenuItem>
@@ -711,7 +689,6 @@ const handleSend = () => {
             </Select>
           </FormControl>
 
-          {/* autocomplete/text input */}
           <Autocomplete
             freeSolo
             options={suggestions}
@@ -728,15 +705,15 @@ const handleSend = () => {
                 {...params}
                 variant="filled"
                 placeholder="Type a message"
-                InputProps={{ 
-                  ...params.InputProps, 
+                InputProps={{
+                  ...params.InputProps,
                   disableUnderline: true,
                   sx: {
-                    color: 'white',
-                    '&:focus': {
-                      borderColor: teal[300]
-                    }
-                  }
+                    color: "white",
+                    "&:focus": {
+                      borderColor: teal[300],
+                    },
+                  },
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !loading) {
@@ -748,9 +725,8 @@ const handleSend = () => {
             )}
           />
 
-          {/* file upload */}
-          <IconButton 
-            onClick={() => fileInputRef.current.click()} 
+          <IconButton
+            onClick={() => fileInputRef.current.click()}
             sx={{ color: teal[300] }}
           >
             <MdUploadFile size={28} />
@@ -763,10 +739,9 @@ const handleSend = () => {
             />
           </IconButton>
 
-          {/* send button */}
-          <IconButton 
-            onClick={handleSend} 
-            disabled={loading || (!inputText.trim() && !image)}
+          <IconButton
+            onClick={handleSend}
+            disabled={loading || (!inputText.trim() && !imageFile)}
             sx={{ color: teal[300] }}
           >
             <MdSend size={28} />

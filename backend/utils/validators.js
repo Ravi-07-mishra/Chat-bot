@@ -1,26 +1,25 @@
-const { body, validationResult } = require("express-validator");
+const { body, validationResult, oneOf } = require("express-validator");
 
-// Validate function
+// Middleware to run validations and handle errors
 const validate = (validations) => {
   return async (req, res, next) => {
-    await Promise.all(validations.map(validation => validation.run(req)));
-    
+    await Promise.all(validations.map((validation) => validation.run(req)));
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(422).json({ errors: errors.array() });
     }
-    
     next();
   };
 };
 
-// Validators
+// Auth validators
 const loginValidator = [
   body("email").trim().isEmail().withMessage("Invalid email format"),
   body("password")
     .trim()
     .isLength({ min: 6 })
-    .withMessage("Should contain at least 6 characters"),
+    .withMessage("Password should contain at least 6 characters"),
 ];
 
 const signupValidator = [
@@ -28,22 +27,31 @@ const signupValidator = [
   ...loginValidator,
 ];
 
+// Chat validators: require either message or image
 const chatCompletionValidator = [
-  body("message").notEmpty().withMessage("Message is required"),
+  oneOf([
+    body("message").notEmpty(),
+    body("image").notEmpty(),
+  ], "Either message or image is required"),
   body("conversationId").optional().isString(),
-  body("image").optional().isString()
 ];
 
 const streamChatValidator = [
-  body("message").notEmpty().withMessage("Message is required"),
+  oneOf([
+    body("message").notEmpty(),
+    body("image").notEmpty(),
+  ], "Either message or image is required"),
   body("conversationId").optional().isString(),
-  body("image").optional().isString()
 ];
 
+// Upload validator: accept JSON base64 fields or multer file
 const uploadValidator = [
-  body("imageBase64").notEmpty().withMessage("Image is required"),
+  oneOf([
+    body("image").exists().isString(),
+    body("imageBase64").exists().isString(),
+  ], 'Image is required (as base64 in "image" or "imageBase64")'),
   body("message").optional().isString(),
-  body("conversationId").optional().isString()
+  body("conversationId").optional().isString(),
 ];
 
 module.exports = {
@@ -52,5 +60,5 @@ module.exports = {
   loginValidator,
   chatCompletionValidator,
   streamChatValidator,
-  uploadValidator
+  uploadValidator,
 };
