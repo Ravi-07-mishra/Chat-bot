@@ -1,209 +1,198 @@
-import api from "../api";
+// src/api/chat.js
+import api from '../api';
+
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
   if (parts.length === 2) return parts.pop().split(';').shift();
 }
+
+// ————— Authentication —————
 export const signupUser = async (name, email, password) => {
-  try {
-    const res = await api.post("/user/signup", { name, email, password });
-    return res.data.user;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Signup failed");
-  }
+  const res = await api.post('/user/signup', { name, email, password });
+  return res.data.user;
 };
 
 export const loginUser = async (email, password) => {
-  try {
-    const res = await api.post("/user/login", { email, password });
-    return res.data.user;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Login failed");
-  }
+  const res = await api.post('/user/login', { email, password });
+  return res.data.user;
 };
 
 export const checkAuthStatus = async () => {
-  try {
-    const res = await api.get("/user/verify");
-    return res.data.user;
-  } catch (err) {
-    if (err.response?.status === 401) {
-      throw new Error("Not authenticated");
-    }
-    throw new Error("Authentication check failed");
-  }
+  const res = await api.get('/user/verify');
+  return res.data.user;
 };
 
+// ————— Conversations —————
 export const getConversations = async () => {
-  try {
-    const res = await api.get("/chat/conversations");
-    return res.data.conversations;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Failed to get conversations");
-  }
+  const res = await api.get('/chat/conversations');
+  return res.data.conversations;
 };
 
 export const getConversationById = async (id) => {
-  try {
-    const res = await api.get(`/chat/conversations/${id}`);
-    return res.data.conversation;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Failed to get conversation");
-  }
+  const res = await api.get(`/chat/conversations/${id}`);
+  return res.data.conversation;
 };
 
-function parseSSE(buffer, onChunk, onDone) {
-  const blocks = buffer.split("\n\n");
-  blocks.slice(0, -1).forEach((block) => {
-    const dataLine = block.split("\n").find((l) => l.startsWith("data: "));
-    if (!dataLine) return;
-    const jsonStr = dataLine.replace(/^data:\s*/, "");
-    try {
-      const parsed = JSON.parse(jsonStr);
-      if (parsed.part) onChunk(parsed.part);
-      else if (parsed.text) onDone(parsed.text, parsed.conversationId);
-    } catch {
-      // ignore non-JSON lines
-    }
-  });
-  return blocks[blocks.length - 1];
-}
+export const deleteConversation = async (id) => {
+  const res = await api.delete(`/chat/conversations/${id}`);
+  return res.data;
+};
 
+// ————— Non‑streaming chat (fallback) —————
+export const sendChat = async ({ message, conversationId, image }) => {
+  const payload = { message };
+  if (conversationId) payload.conversationId = conversationId;
+  if (image)          payload.image          = image;
+  const res = await api.post('/chat', payload);
+  return res.data;
+};
+
+// ————— Streaming chat (SSE) —————
 export function streamChat({ message, conversationId, image, onChunk, onDone, onError }) {
-  // Validate payload
   if (!message?.trim() && !image) {
-    onError("Message or image is required");
+    onError('Message or image is required');
     return;
   }
-
-  // Get token explicitly
   const token = getCookie('bot_token');
-
-  // Construct payload without null/undefined fields
   const payload = {
-    message: message?.trim() || "",
+    message: message?.trim() || '',
     ...(conversationId && { conversationId }),
-    ...(image && { image })
+    ...(image && { image }),
   };
 
   fetch(`${import.meta.env.VITE_API_URL}/chat/stream`, {
-    method: "POST",
-    headers: { 
-      "Content-Type": "application/json",
-      "Authorization": token ? `Bearer ${token}` : ""
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
     },
-    credentials: "include",
+    credentials: 'include',
     body: JSON.stringify(payload),
-  }).then(async (res) => {
-    if (res.status === 401) {
-      window.dispatchEvent(new CustomEvent("unauthorized"));
-      throw new Error("Unauthorized");
-    }
-    
-    if (!res.ok) {
-      const errorResponse = await res.json().catch(() => ({}));
-      throw new Error(
-        errorResponse.message || 
-        errorResponse.errors?.[0]?.msg || 
-        `Request failed with status ${res.status}`
-      );
-    }
-    
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
+  })
+    .then(async (res) => {
+      if (res.status === 401) {
+        window.dispatchEvent(new CustomEvent('unauthorized'));
+        throw new Error('Unauthorized');
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Error ${res.status}`);
+      }
 
-    function read() {
-      reader.read().then(({ done, value }) => {
-        if (done) {
-          if (buffer.trim()) {
-            try {
-              const data = JSON.parse(buffer);
-              if (data.text) onDone(data.text, data.conversationId);
-            } catch {
-              onError("Invalid response format");
-            }
-          }
-          return;
-        }
-        
-        buffer += decoder.decode(value, { stream: true });
-        buffer = parseSSE(buffer, onChunk, (text, conversationId) => {
-          onDone(text, conversationId);
-          buffer = "";
+      // SSE parser
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      const processBuffer = () => {
+        const events = buffer.split('\n\n');
+        events.slice(0, -1).forEach((evt) => {
+          const dataLine = evt.split('\n').find((l) => l.startsWith('data: '));
+          if (!dataLine) return;
+          try {
+            const payload = JSON.parse(dataLine.replace(/^data:\s*/, ''));
+            if (payload.part) onChunk(payload.part);
+            if (payload.text) onDone(payload.text, payload.conversationId);
+          } catch {}
         });
-        read();
-      }).catch(onError);
-    }
-    
-    read();
-  }).catch(err => {
-    if (err.message.includes("Unauthorized")) {
-      window.dispatchEvent(new CustomEvent("unauthorized"));
-    }
-    onError(err.message);
-  });
+        buffer = events[events.length - 1];
+      };
+
+      const read = () =>
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            if (buffer.trim()) {
+              try {
+                const last = JSON.parse(buffer);
+                onDone(last.text, last.conversationId);
+              } catch {
+                onError('Invalid SSE response');
+              }
+            }
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          processBuffer();
+          read();
+        });
+
+      read();
+    })
+    .catch((err) => {
+      if (err.message === 'Unauthorized') {
+        window.dispatchEvent(new CustomEvent('unauthorized'));
+      }
+      onError(err.message);
+    });
 }
 
-export function uploadFile({ file, text = "", conversationId, onChunk, onDone, onError }) {
+// ————— Image upload as base64 —————
+export function uploadFile({ file, text, conversationId, onChunk, onDone, onError }) {
+  if (!(file instanceof Blob)) {
+    return onError('uploadFile error: Expected a File or Blob');
+  }
   const reader = new FileReader();
-
   reader.onload = () => {
-    const base64 = reader.result;
-    
+    const base64 = reader.result; // "data:image/…;base64,…"
     fetch(`${import.meta.env.VITE_API_URL}/chat/upload`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-      },
-      credentials: "include",
-      body: JSON.stringify({ 
-        imageBase64: base64, 
-        message: text, 
-        conversationId 
-      }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ image: base64, text, conversationId }),
     })
-      .then((res) => {
-        if (!res.ok) throw new Error("Upload failed");
-        const streamReader = res.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        let buffer = "";
-
-        function read() {
-          streamReader.read().then(({ done, value }) => {
-            if (done) return;
-            buffer += decoder.decode(value, { stream: true });
-            buffer = parseSSE(buffer, onChunk, (text, conversationId) => {
-              onDone(text, conversationId);
-              buffer = "";
-            });
-            read();
-          }).catch(onError);
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.message || `Upload failed: ${res.status}`);
         }
+        // Reuse SSE parsing from streamChat
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        const processBuffer = () => {
+          const events = buffer.split('\n\n');
+          events.slice(0, -1).forEach((evt) => {
+            const dataLine = evt.split('\n').find((l) => l.startsWith('data: '));
+            if (!dataLine) return;
+            try {
+              const payload = JSON.parse(dataLine.replace(/^data:\s*/, ''));
+              if (payload.part) onChunk(payload.part);
+              if (payload.text) onDone(payload.text, payload.conversationId);
+            } catch {}
+          });
+          buffer = events[events.length - 1];
+        };
+
+        const read = () =>
+          reader.read().then(({ done, value }) => {
+            if (done) {
+              if (buffer.trim()) {
+                try {
+                  const last = JSON.parse(buffer);
+                  onDone(last.text, last.conversationId);
+                } catch {
+                  onError('Invalid SSE in upload');
+                }
+              }
+              return;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            processBuffer();
+            read();
+          });
 
         read();
       })
-      .catch(onError);
+      .catch((err) => onError(err.message));
   };
-
-  reader.onerror = onError;
+  reader.onerror = () => onError('Failed to read the image file.');
   reader.readAsDataURL(file);
 }
 
-export const deleteConversation = async (id) => {
-  try {
-    const res = await api.delete(`/chat/conversations/${id}`);
-    return res.data;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Failed to delete conversation");
-  }
-};
-
+// ————— Suggestions —————
 export const getSuggestions = async (prefix) => {
-  try {
-    const res = await api.post("/chat/suggest", { prefix });
-    return res.data.suggestions;
-  } catch (err) {
-    throw new Error(err.response?.data?.message || "Failed to get suggestions");
-  }
+  const res = await api.post('/chat/suggest', { prefix });
+  return res.data.suggestions;
 };

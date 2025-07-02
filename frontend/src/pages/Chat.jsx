@@ -39,6 +39,7 @@ import {
   uploadFile,
   getSuggestions,
   deleteConversation,
+  sendChat
 } from "../helpers/api-communicator";
 
 export default function Chat() {
@@ -161,36 +162,33 @@ export default function Chat() {
 
   // Handle file selection
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    // Validate file type
-    if (!file.type.match('image.*')) {
-      setError('Please select an image file');
-      return;
-    }
-    
-    // Validate file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image size should be less than 5MB');
-      return;
-    }
-    
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImage(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.match('image.*')) {
+    setError('Please select an image file');
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setError('Image size should be less than 5MB');
+    return;
+  }
+
+  setImageFile(file);  // ✅ store actual file for uploading
+  setImagePreview(URL.createObjectURL(file)); // ✅ store preview URL for UI display
+};
+
 
   // Clear selected image
-  const clearImage = () => {
-    setImage(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+ const clearImage = () => {
+  setImageFile(null);
+  setImagePreview(null);
+  if (fileInputRef.current) fileInputRef.current.value = '';
+};
 
-  // Handle text messages with streaming
-  const handleTextMessage = () => {
+
+  const handleTextMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
 
@@ -198,120 +196,130 @@ export default function Chat() {
     setLoading(true);
     setError(null);
 
-    // Add user message optimistically
+    // Optimistic UI update
     setCurrentConversation(c => ({
       ...c,
-      messages: [...c.messages, { role: 'user', content: text }]
+      messages: [...c.messages, { role: "user", content: text }]
     }));
 
-    let buffer = "";
-    streamChat({
-      message: text,
-      conversationId: currentConversation.conversationId,
-      image: image,
-      onChunk: (part) => {
-        buffer += part;
-        setCurrentConversation((c) => ({
-          ...c,
-          messages: [
-            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
-            { role: 'assistant-stream', content: buffer }
-          ]
-        }));
-      },
-      onDone: (full, conversationId) => {
-        setCurrentConversation((c) => ({
-          conversationId: conversationId || c.conversationId,
-          messages: [
-            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
-            { role: 'assistant', content: full }
-          ]
-        }));
-        loadConversationSummaries();
-        setLoading(false);
-        clearImage();
-      },
-      onError: (err) => {
-        setError(err);
-        setLoading(false);
-        // Remove optimistic messages on error
-        setCurrentConversation(c => ({
-          ...c,
-          messages: c.messages.slice(0, -1)
-        }));
-      },
-    });
-  };
+    try {
+      // only include conversationId when it exists
+      const args = { message: text };
+      if (currentConversation.conversationId) {
+        args.conversationId = currentConversation.conversationId;
+      }
 
-  // Handle file upload with streaming
-  const handleFileUpload = () => {
-    if (!image) return;
-    const text = inputText.trim();
-    
-    setInputText("");
-    setLoading(true);
-    setError(null);
+      const result = await sendChat(args);
 
-    // Add user message optimistically
-    const userMessage = {
-      role: 'user',
-      content: text,
-      image: image
-    };
-    
-    setCurrentConversation(c => ({
-      ...c,
-      messages: [...c.messages, userMessage]
-    }));
+      // Replace messages with server‑authoritative conversation
+      setCurrentConversation({
+        conversationId: result.conversation.conversationId,
+        messages: [...result.conversation.messages]
+      });
 
-    let buffer = "";
-    uploadFile({
-      file: image,
-      text: text,
-      conversationId: currentConversation.conversationId,
-      onChunk: (part) => {
-        buffer += part;
-        setCurrentConversation((c) => ({
-          ...c,
-          messages: [
-            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
-            { role: 'assistant-stream', content: buffer }
-          ]
-        }));
-      },
-      onDone: (full, conversationId) => {
-        setCurrentConversation((c) => ({
-          conversationId: conversationId || c.conversationId,
-          messages: [
-            ...c.messages.filter((m) => m.role !== 'assistant-stream'),
-            { role: 'assistant', content: full }
-          ]
-        }));
-        loadConversationSummaries();
-        setLoading(false);
-        clearImage();
-      },
-      onError: (err) => {
-        setError(err);
-        setLoading(false);
-        clearImage();
-        // Remove optimistic messages on error
-        setCurrentConversation(c => ({
-          ...c,
-          messages: c.messages.slice(0, -1)
-        }));
-      },
-    });
-  };
-
-  // Send message (handles both text and images)
-  const handleSend = () => {
-    if (image) {
-      handleFileUpload();
-    } else {
-      handleTextMessage();
+      await loadConversationSummaries();
+    } catch (err) {
+      setError(err.message || "Request failed");
+      // Roll back optimistic update
+      setCurrentConversation(c => ({
+        ...c,
+        messages: c.messages.slice(0, -1)
+      }));
+    } finally {
+      setLoading(false);
     }
   };
+
+
+  // Handle file upload with streaming
+ const handleFileUpload = () => {
+  // 1️⃣ Make sure we actually have a File/Blob
+  const file = image;
+  if (!(file instanceof Blob)) {
+    const msg = "Please select an actual image file to upload.";
+    console.error(msg, file);
+    setError(msg);
+    return;
+  }
+
+  const text = inputText.trim();
+
+  // 2️⃣ Clear input & start loading
+  setInputText("");
+  setLoading(true);
+  setError(null);
+
+  // 3️⃣ Optimistic UI: add the user’s image + text
+  const userMessage = {
+    role: "user",
+    content: text,
+    image: URL.createObjectURL(file)  // or however you preview it
+  };
+  setCurrentConversation(c => ({
+    ...c,
+    messages: [...c.messages, userMessage],
+  }));
+
+  // 4️⃣ Stream buffer for assistant
+  let buffer = "";
+
+  uploadFile({
+    file,               // <- guaranteed to be a Blob/File
+    text,              
+    // only include if defined
+    conversationId: currentConversation.conversationId || undefined,
+    onChunk: (part) => {
+      buffer += part;
+      setCurrentConversation(c => ({
+        ...c,
+        messages: [
+          ...c.messages.filter(m => m.role !== "assistant-stream"),
+          { role: "assistant-stream", content: buffer }
+        ]
+      }));
+    },
+    onDone: (full, convId) => {
+      setCurrentConversation(c => ({
+        conversationId: convId || c.conversationId,
+        messages: [
+          ...c.messages.filter(m => m.role !== "assistant-stream"),
+          { role: "assistant", content: full }
+        ]
+      }));
+      loadConversationSummaries();
+      setLoading(false);
+      clearImage();       // reset your image picker state
+    },
+    onError: (errMsg) => {
+      console.error("uploadFile error", errMsg);
+      setError(errMsg);
+      setLoading(false);
+      clearImage();
+      // remove the last optimistic user message
+      setCurrentConversation(c => ({
+        ...c,
+        messages: c.messages.slice(0, -1)
+      }));
+    }
+  });
+};
+
+
+  // Send message (handles both text and images)
+const handleSend = () => {
+  if (imageFile) {
+    uploadFile({
+      file: imageFile, // ✅ send the actual file
+      text,
+      conversationId,
+      onChunk: handleChunk,
+      onDone: handleDone,
+      onError: handleError,
+    });
+  } else {
+    handleTextMessage(); // fallback for text-only
+  }
+};
 
   // Debounced suggestions fetch
   const handleInputChange = (event, value, reason) => {
