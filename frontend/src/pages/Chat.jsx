@@ -21,10 +21,12 @@ import {
   ListItemAvatar,
   ListItemText,
   Tooltip,
+  Divider,
+  Badge,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import TranslateIcon from "@mui/icons-material/Translate";
-import { red, teal, grey } from "@mui/material/colors";
+import { teal, deepPurple, grey } from "@mui/material/colors";
 import {
   MdSend,
   MdMic,
@@ -33,6 +35,7 @@ import {
   MdPause,
   MdPlayArrow,
   MdClose,
+  MdAutoAwesome,
 } from "react-icons/md";
 import Chatitem from "../components/chat/Chatitem";
 import { useNavigate } from "react-router-dom";
@@ -49,14 +52,12 @@ import {
   deleteConversation,
 } from "../helpers/api-communicator";
 
-// Simple mock translation function (no API calls)
+// Simple mock translation function
 const translateText = async (text, targetLang) => {
   if (!text || text.trim() === '') return text;
   
-  // Simulate translation delay
   await new Promise(resolve => setTimeout(resolve, 300));
   
-  // Mock translation - in a real app you might use a library or different approach
   return `[${targetLang.toUpperCase()}] ${text}`;
 };
 
@@ -153,7 +154,6 @@ export default function Chat() {
     const last = msgs[msgs.length - 1];
     if (last.role === "assistant" && !isSpeaking) {
       try {
-        // Cancel any ongoing speech
         if (window.speechSynthesis.speaking) {
           window.speechSynthesis.cancel();
         }
@@ -164,10 +164,8 @@ export default function Chat() {
         utt.pitch = 1;
         utt.volume = 1;
         
-        // Store in ref for global access
         synthRef.current = utt;
         
-        // Event listeners for speech synthesis
         utt.onstart = () => {
           setIsSpeaking(true);
           setPaused(false);
@@ -183,7 +181,6 @@ export default function Chat() {
           setIsSpeaking(false);
           setPaused(false);
           
-          // Handle specific errors
           if (e.error === 'not-allowed') {
             setError("Speech blocked by browser. Please allow audio permissions.");
           }
@@ -218,7 +215,7 @@ export default function Chat() {
     try {
       const convo = await getConversationById(id);
       setCurrentConversation(convo);
-      setTranslatedMessages({}); // Reset translations when loading new conversation
+      setTranslatedMessages({});
     } catch (err) {
       setError(err.message || "Failed to load conversation");
     } finally {
@@ -275,7 +272,6 @@ export default function Chat() {
     setLoading(true);
     setError(null);
 
-    // Optimistic UI: append the user message immediately
     setCurrentConversation(c => ({
       ...c,
       messages: [...c.messages, { role: "user", content: text }]
@@ -283,7 +279,6 @@ export default function Chat() {
 
     let buffer = "";
 
-    // Stream the chat
     streamChat({
       message: text,
       conversationId: currentConversation.conversationId,
@@ -311,7 +306,6 @@ export default function Chat() {
       onError: (errMsg) => {
         setError(errMsg || "Failed to send message");
         setLoading(false);
-        // Roll back the optimistic user message
         setCurrentConversation(c => ({
           ...c,
           messages: c.messages.slice(0, -1)
@@ -328,7 +322,6 @@ export default function Chat() {
       setLoading(true);
       setError(null);
 
-      // Optimistic UI with image preview
       setCurrentConversation((c) => ({
         ...c,
         messages: [
@@ -368,7 +361,6 @@ export default function Chat() {
           setError(errMsg || "Failed to upload image");
           setLoading(false);
           clearImage();
-          // Rollback optimistic
           setCurrentConversation((c) => ({
             ...c,
             messages: c.messages.slice(0, -1),
@@ -494,7 +486,6 @@ export default function Chat() {
   const handleTranslateMessage = async (index) => {
     if (!currentConversation.messages[index]) return;
     
-    // If already translated, revert to original
     if (translatedMessages[index]) {
       setTranslatedMessages(prev => {
         const newTrans = {...prev};
@@ -520,13 +511,13 @@ export default function Chat() {
     }
   };
 
-  // ===== Enhanced Styles =====
+  // ===== Enhanced Dark Aesthetic Styles =====
   const styles = {
     mainContainer: {
       display: "flex",
       height: "100vh",
       bgcolor: "#0a1929",
-      backgroundImage: "linear-gradient(135deg, #0a1929 0%, #122c44 100%)",
+      backgroundImage: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
       overflow: "hidden",
     },
     sidebar: {
@@ -535,26 +526,25 @@ export default function Chat() {
       width: { xs: "100%", md: "30%" },
       maxWidth: { md: 380 },
       p: { xs: 1.5, sm: 2 },
-      backgroundColor: "rgba(16, 30, 49, 0.95)",
-      borderRadius: { xs: 0, md: 2 },
+      backgroundColor: "rgba(15, 23, 42, 0.95)",
+      borderRadius: { xs: 0, md: 0 },
       height: "100%",
       overflowY: "auto",
-      borderRight: { md: "1px solid rgba(46, 125, 150, 0.2)" },
+      borderRight: { md: "1px solid rgba(71, 85, 105, 0.5)" },
       backdropFilter: "blur(4px)",
       boxShadow: { md: "0 4px 20px rgba(0, 0, 0, 0.3)" }
     },
     chatContainer: {
       width: "100%",
       height: { xs: "60vh", sm: "65vh", md: "70vh" },
-      borderRadius: 3,
+      borderRadius: 0,
       display: "flex",
       flexDirection: "column",
       overflowY: "auto",
-      bgcolor: "rgba(17, 34, 56, 0.4)",
-      boxShadow: "inset 0 2px 12px rgba(0, 0, 0, 0.25)",
+      bgcolor: "rgba(15, 23, 42, 0.5)",
       p: 1.5,
-      border: "1px solid rgba(46, 125, 150, 0.2)",
-      background: "linear-gradient(to bottom, rgba(12, 35, 64, 0.6), rgba(8, 25, 48, 0.8))"
+      border: "1px solid rgba(71, 85, 105, 0.3)",
+      background: "linear-gradient(to bottom, rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.9))"
     },
     inputContainer: {
       display: "flex",
@@ -562,16 +552,16 @@ export default function Chat() {
       mt: 2,
       gap: 1,
       flexWrap: "wrap",
-      p: 1,
-      borderRadius: 3,
-      bgcolor: "rgba(16, 30, 49, 0.7)",
+      p: 1.5,
+      borderRadius: 2,
+      bgcolor: "rgba(30, 41, 59, 0.7)",
       backdropFilter: "blur(8px)",
-      border: "1px solid rgba(46, 125, 150, 0.2)",
-      boxShadow: "0 4px 15px rgba(0, 0, 0, 0.2)"
+      border: "1px solid rgba(71, 85, 105, 0.4)",
+      boxShadow: "0 4px 15px rgba(0, 0, 0, 0.25)"
     },
     newChatButton: {
       mb: 2,
-      bgcolor: "rgba(0, 150, 136, 0.8)",
+      bgcolor: "rgba(99, 102, 241, 0.9)",
       color: "white",
       borderRadius: 2,
       fontWeight: 600,
@@ -580,9 +570,9 @@ export default function Chat() {
       textTransform: "none",
       transition: "all 0.3s ease",
       ":hover": { 
-        bgcolor: "rgba(0, 180, 162, 0.9)",
+        bgcolor: "rgba(129, 140, 248, 1)",
         transform: "translateY(-2px)",
-        boxShadow: "0 4px 8px rgba(0, 150, 136, 0.4)"
+        boxShadow: "0 4px 8px rgba(99, 102, 241, 0.4)"
       }
     },
     chatHeader: {
@@ -598,7 +588,7 @@ export default function Chat() {
       textAlign: "center",
       fontSize: { xs: "1.8rem", sm: "2.2rem", md: "2.5rem" },
       fontWeight: 700,
-      background: "linear-gradient(90deg, #4db6ac, #81c784)",
+      background: "linear-gradient(90deg, #818cf8, #a5b4fc)",
       WebkitBackgroundClip: "text",
       WebkitTextFillColor: "transparent",
       textShadow: "0 2px 4px rgba(0,0,0,0.2)"
@@ -610,20 +600,22 @@ export default function Chat() {
       height: "100%",
       flexDirection: "column",
       textAlign: "center",
-      color: "#90a4ae",
+      color: "#94a3b8",
       p: 3
     },
     suggestionItem: {
-      bgcolor: "rgba(255, 255, 255, 0.05)",
-      borderRadius: 1,
+      bgcolor: "rgba(99, 102, 241, 0.15)",
+      borderRadius: 1.5,
       px: 1.5,
-      py: 0.5,
+      py: 1,
       m: 0.5,
       cursor: "pointer",
       transition: "all 0.2s ease",
+      border: "1px solid rgba(99, 102, 241, 0.3)",
       ":hover": {
-        bgcolor: "rgba(0, 150, 136, 0.2)",
-        transform: "scale(1.02)"
+        bgcolor: "rgba(99, 102, 241, 0.25)",
+        transform: "scale(1.02)",
+        borderColor: "rgba(99, 102, 241, 0.5)"
       }
     },
     mobileMenuButton: {
@@ -631,13 +623,13 @@ export default function Chat() {
       top: 10, 
       left: 10, 
       zIndex: 10,
-      color: "#4db6ac",
-      bgcolor: "rgba(16, 30, 49, 0.7)",
+      color: "#a5b4fc",
+      bgcolor: "rgba(15, 23, 42, 0.7)",
       backdropFilter: "blur(4px)",
-      border: "1px solid rgba(46, 125, 150, 0.2)",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+      border: "1px solid rgba(71, 85, 105, 0.4)",
+      boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
       "&:hover": {
-        bgcolor: "rgba(0, 150, 136, 0.3)"
+        bgcolor: "rgba(99, 102, 241, 0.3)"
       }
     },
     translatedBadge: {
@@ -645,8 +637,8 @@ export default function Chat() {
       top: 4,
       right: 4,
       fontSize: "0.7rem",
-      bgcolor: "rgba(0, 150, 136, 0.3)",
-      color: "white",
+      bgcolor: "rgba(99, 102, 241, 0.3)",
+      color: "#c7d2fe",
       px: 1,
       borderRadius: 2
     },
@@ -655,7 +647,23 @@ export default function Chat() {
       top: 10,
       right: 10,
       zIndex: 10,
-      color: "#e57373",
+      color: "#f87171",
+    },
+    loadingIndicator: {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      py: 3
+    },
+    userAvatar: {
+      bgcolor: "rgba(99, 102, 241, 0.9)",
+      width: 32,
+      height: 32
+    },
+    assistantAvatar: {
+      bgcolor: "rgba(71, 85, 105, 0.9)",
+      width: 32,
+      height: 32
     }
   };
 
@@ -663,8 +671,8 @@ export default function Chat() {
   const sidebarContent = (
     <Box sx={styles.sidebar}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Button onClick={startNew} sx={styles.newChatButton}>
-          + New Conversation
+        <Button onClick={startNew} sx={styles.newChatButton} startIcon={<MdAutoAwesome />}>
+          New Chat
         </Button>
         
         {/* Close button for mobile */}
@@ -678,12 +686,14 @@ export default function Chat() {
         )}
       </Box>
 
+      <Divider sx={{ bgcolor: "rgba(71, 85, 105, 0.5)", my: 1 }} />
+
       {loadingConversations ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
-          <CircularProgress size={24} sx={{ color: "#4db6ac" }} />
+        <Box sx={styles.loadingIndicator}>
+          <CircularProgress size={24} sx={{ color: "#818cf8" }} />
         </Box>
       ) : conversationSummaries.length === 0 ? (
-        <Typography color="#90a4ae" textAlign="center" sx={{ py: 2 }}>
+        <Typography color="#94a3b8" textAlign="center" sx={{ py: 2 }}>
           No conversations yet
         </Typography>
       ) : (
@@ -701,27 +711,34 @@ export default function Chat() {
                 sx={{
                   mb: 1.5,
                   bgcolor: isActive
-                    ? "rgba(0, 150, 136, 0.25)"
-                    : "rgba(255, 255, 255, 0.05)",
-                  borderRadius: 3,
+                    ? "rgba(99, 102, 241, 0.2)"
+                    : "rgba(30, 41, 59, 0.5)",
+                  borderRadius: 1.5,
                   cursor: "pointer",
                   boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                   transition: "all 0.2s ease",
+                  border: "1px solid",
+                  borderColor: isActive 
+                    ? "rgba(99, 102, 241, 0.4)" 
+                    : "rgba(71, 85, 105, 0.3)",
                   "&:hover": {
                     bgcolor: isActive 
-                      ? "rgba(0, 180, 162, 0.3)"
-                      : "rgba(255,255,255,0.1)",
+                      ? "rgba(99, 102, 241, 0.3)"
+                      : "rgba(30, 41, 59, 0.7)",
                     transform: "translateY(-2px)",
-                    boxShadow: "0 4px 8px rgba(0,0,0,0.3)"
+                    boxShadow: "0 4px 8px rgba(0,0,0,0.3)",
+                    borderColor: "rgba(99, 102, 241, 0.5)"
                   },
                 }}
               >
                 <ListItemAvatar>
                   <Avatar
                     sx={{
-                      bgcolor: isActive ? "#00897b" : "#2e7d32",
+                      bgcolor: isActive ? "#6366f1" : "#475569",
                       fontSize: 14,
                       fontWeight: 600,
+                      width: 32,
+                      height: 32
                     }}
                   >
                     {(s.title || "?")[0].toUpperCase()}
@@ -730,7 +747,7 @@ export default function Chat() {
                 <ListItemText
                   primary={s.title || "New Conversation"}
                   primaryTypographyProps={{
-                    color: "white",
+                    color: "#e2e8f0",
                     fontWeight: 500,
                     noWrap: true,
                     fontSize: "0.95rem"
@@ -740,7 +757,7 @@ export default function Chat() {
                     (s.lastMessage?.content?.length > 40 ? "..." : "")
                   }
                   secondaryTypographyProps={{
-                    color: "#b0bec5",
+                    color: "#94a3b8",
                     noWrap: true,
                     fontSize: "0.8rem"
                   }}
@@ -751,7 +768,7 @@ export default function Chat() {
                     e.stopPropagation();
                     handleDelete(s.conversationId);
                   }}
-                  sx={{ color: "#e57373", ml: 1 }}
+                  sx={{ color: "#f87171", ml: 1 }}
                 >
                   <DeleteIcon fontSize="small" />
                 </IconButton>
@@ -798,7 +815,8 @@ export default function Chat() {
           py: { xs: 1, sm: 2 },
           width: "100%",
           position: "relative",
-          overflow: "hidden"
+          overflow: "hidden",
+          background: "linear-gradient(to bottom, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 1))"
         }}
       >
         {/* Menu button */}
@@ -822,11 +840,11 @@ export default function Chat() {
                 startIcon={<DeleteIcon />}
                 variant="outlined"
                 sx={{
-                  color: "#ff8a80",
-                  borderColor: "#ff8a80",
+                  color: "#f87171",
+                  borderColor: "#f87171",
                   "&:hover": {
-                    bgcolor: "rgba(255, 138, 128, 0.1)",
-                    borderColor: "#ff5252"
+                    bgcolor: "rgba(248, 113, 113, 0.1)",
+                    borderColor: "#ef4444"
                   }
                 }}
                 onClick={() =>
@@ -840,23 +858,24 @@ export default function Chat() {
             )}
             
             <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel sx={{ color: "#b0bec5" }}>Language</InputLabel>
+              <InputLabel sx={{ color: "#cbd5e1" }}>Language</InputLabel>
               <Select
                 value={lang}
                 label="Language"
                 onChange={handleLangChange}
                 sx={{
-                  color: "white",
+                  color: "#e2e8f0",
                   ".MuiOutlinedInput-notchedOutline": {
-                    borderColor: "rgba(46, 125, 150, 0.3)",
+                    borderColor: "rgba(129, 140, 248, 0.3)",
                   },
                   "&:hover .MuiOutlinedInput-notchedOutline": {
-                    borderColor: "#4db6ac",
+                    borderColor: "#818cf8",
                   },
                   "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
-                    borderColor: "#4db6ac",
+                    borderColor: "#818cf8",
+                    boxShadow: "0 0 0 2px rgba(129, 140, 248, 0.2)"
                   },
-                  ".MuiSvgIcon-root": { color: "#4db6ac" }
+                  ".MuiSvgIcon-root": { color: "#818cf8" }
                 }}
               >
                 <MenuItem value="en">English</MenuItem>
@@ -877,11 +896,12 @@ export default function Chat() {
           sx={styles.chatContainer}
         >
           {error && (
-            <Typography color="#ff8a80" sx={{ 
+            <Typography color="#f87171" sx={{ 
               p: 1.5, 
-              bgcolor: "rgba(255, 138, 128, 0.1)", 
+              bgcolor: "rgba(248, 113, 113, 0.1)", 
               borderRadius: 2,
-              mb: 1
+              mb: 1,
+              border: "1px solid rgba(248, 113, 113, 0.3)"
             }}>
               {error}
             </Typography>
@@ -889,28 +909,44 @@ export default function Chat() {
 
           {currentConversation.messages.length === 0 ? (
             <Box sx={styles.emptyChat}>
-              <Typography variant="h6" sx={{ 
-                mb: 1, 
-                color: "#e0f7fa", 
-                fontWeight: 500,
-                fontSize: { xs: "1.2rem", sm: "1.5rem" }
-              }}>
-                Welcome to Gemini Chat
-              </Typography>
-              <Typography sx={{ 
-                color: "#90a4ae", 
-                maxWidth: 500,
+              <Box sx={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: 2,
                 mb: 3
               }}>
-                Start by typing a message, asking a question, or uploading an image
+                <MdAutoAwesome size={48} style={{ color: "#818cf8" }} />
+                <Typography variant="h4" sx={{ 
+                  color: "#e2e8f0", 
+                  fontWeight: 700,
+                  background: "linear-gradient(90deg, #818cf8, #a5b4fc)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent"
+                }}>
+                  Gemini Assistant
+                </Typography>
+              </Box>
+              <Typography sx={{ 
+                color: "#94a3b8", 
+                maxWidth: 500,
+                mb: 3,
+                fontSize: "1.1rem"
+              }}>
+                Ask anything or upload an image to get started
               </Typography>
               <Box sx={{ 
                 display: "flex", 
                 flexWrap: "wrap", 
                 justifyContent: "center", 
-                gap: 1 
+                gap: 1.5,
+                maxWidth: 600
               }}>
-                {["What is Gemini AI?", "How does this work?", "Explain quantum computing", "Tell me a joke"].map((text, i) => (
+                {[
+                  "Explain quantum computing in simple terms", 
+                  "What's the latest in AI research?",
+                  "How do I center a div with CSS?",
+                  "Write a poem about technology"
+                ].map((text, i) => (
                   <Typography 
                     key={i} 
                     sx={styles.suggestionItem}
@@ -926,7 +962,12 @@ export default function Chat() {
             </Box>
           ) : (
             currentConversation.messages.map((msg, i) => (
-              <Box key={i} sx={{ position: "relative" }}>
+              <Box key={i} sx={{ 
+                position: "relative",
+                mb: 1.5,
+                alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
+                maxWidth: "90%"
+              }}>
                 <Chatitem 
                   message={{
                     ...msg,
@@ -950,11 +991,11 @@ export default function Chat() {
                         right: 8,
                         bottom: 8,
                         bgcolor: translatedMessages[i] 
-                          ? "rgba(0, 180, 162, 0.5)" 
-                          : "rgba(0, 150, 136, 0.2)",
-                        color: "white",
+                          ? "rgba(99, 102, 241, 0.4)" 
+                          : "rgba(71, 85, 105, 0.3)",
+                        color: "#e2e8f0",
                         "&:hover": {
-                          bgcolor: "rgba(0, 150, 136, 0.4)"
+                          bgcolor: "rgba(99, 102, 241, 0.5)"
                         }
                       }}
                       size="small"
@@ -983,15 +1024,16 @@ export default function Chat() {
               sx={{
                 display: "flex",
                 p: 2,
-                bgcolor: "rgba(0, 77, 64, 0.4)",
+                bgcolor: "rgba(30, 41, 59, 0.6)",
                 gap: 2,
                 alignItems: "center",
                 borderRadius: 2,
-                border: "1px solid rgba(0, 150, 136, 0.3)",
-                mt: 1
+                border: "1px solid rgba(99, 102, 241, 0.3)",
+                mt: 1,
+                alignSelf: "flex-start"
               }}
             >
-              <Avatar sx={{ bgcolor: "#00695c" }}>
+              <Avatar sx={{ bgcolor: "rgba(71, 85, 105, 0.8)" }}>
                 <Box sx={{ 
                   width: 24, 
                   height: 24, 
@@ -1004,12 +1046,12 @@ export default function Chat() {
                   <Box sx={{ 
                     width: 16, 
                     height: 16, 
-                    bgcolor: "#00695c",
+                    bgcolor: "#475569",
                     borderRadius: "50%" 
                   }} />
                 </Box>
               </Avatar>
-              <CircularProgress size={20} sx={{ color: "#4db6ac" }} />
+              <CircularProgress size={20} sx={{ color: "#818cf8" }} />
             </Box>
           )}
         </Box>
@@ -1020,15 +1062,15 @@ export default function Chat() {
             sx={{
               mt: 2,
               p: 1.5,
-              bgcolor: "rgba(16, 30, 49, 0.6)",
+              bgcolor: "rgba(30, 41, 59, 0.6)",
               borderRadius: 2,
-              border: "1px solid rgba(46, 125, 150, 0.2)",
+              border: "1px solid rgba(99, 102, 241, 0.3)",
               position: "relative"
             }}
           >
             <Typography
               variant="subtitle2"
-              color="#e0f7fa"
+              color="#e2e8f0"
               sx={{ mb: 1, fontWeight: 500 }}
             >
               Image Preview
@@ -1042,18 +1084,18 @@ export default function Chat() {
                   width: "70px",
                   borderRadius: "8px",
                   objectFit: "cover",
-                  border: "2px solid rgba(0, 150, 136, 0.3)"
+                  border: "2px solid rgba(99, 102, 241, 0.3)"
                 }}
               />
               <IconButton 
                 size="small" 
                 onClick={clearImage}
                 sx={{
-                  bgcolor: "rgba(229, 115, 115, 0.2)",
-                  "&:hover": { bgcolor: "rgba(229, 115, 115, 0.3)" }
+                  bgcolor: "rgba(248, 113, 113, 0.2)",
+                  "&:hover": { bgcolor: "rgba(248, 113, 113, 0.3)" }
                 }}
               >
-                <MdClose color="#e57373" />
+                <MdClose color="#f87171" />
               </IconButton>
             </Box>
           </Box>
@@ -1065,12 +1107,19 @@ export default function Chat() {
             <IconButton 
               onClick={toggleSpeech} 
               sx={{ 
-                color: isListening ? "#ff5252" : "#4db6ac",
-                bgcolor: "rgba(255, 255, 255, 0.05)",
-                "&:hover": { bgcolor: "rgba(0, 150, 136, 0.2)" }
+                color: isListening ? "#f87171" : "#818cf8",
+                bgcolor: "rgba(71, 85, 105, 0.3)",
+                "&:hover": { bgcolor: "rgba(99, 102, 241, 0.3)" }
               }}
             >
-              <MdMic size={24} />
+              <Badge 
+                color="error" 
+                variant="dot" 
+                invisible={!isListening}
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MdMic size={24} />
+              </Badge>
             </IconButton>
           </Tooltip>
 
@@ -1078,9 +1127,9 @@ export default function Chat() {
             <IconButton 
               onClick={handlePauseResume} 
               sx={{ 
-                color: "#4db6ac",
-                bgcolor: "rgba(255, 255, 255, 0.05)",
-                "&:hover": { bgcolor: "rgba(0, 150, 136, 0.2)" },
+                color: "#818cf8",
+                bgcolor: "rgba(71, 85, 105, 0.3)",
+                "&:hover": { bgcolor: "rgba(99, 102, 241, 0.3)" },
                 display: isSpeaking ? "flex" : "none"
               }}
             >
@@ -1102,19 +1151,19 @@ export default function Chat() {
               <TextField
                 {...params}
                 variant="outlined"
-                placeholder="Type your message..."
+                placeholder="Message Gemini..."
                 InputProps={{
                   ...params.InputProps,
                   sx: {
-                    color: "white",
-                    bgcolor: "rgba(255, 255, 255, 0.05)",
+                    color: "#e2e8f0",
+                    bgcolor: "rgba(15, 23, 42, 0.4)",
                     borderRadius: 2,
                     "&:hover fieldset": {
-                      borderColor: "rgba(77, 182, 172, 0.5) !important",
+                      borderColor: "rgba(129, 140, 248, 0.5) !important",
                     },
                     "&.Mui-focused fieldset": {
-                      borderColor: "#4db6ac !important",
-                      boxShadow: "0 0 0 2px rgba(77, 182, 172, 0.2)"
+                      borderColor: "#818cf8 !important",
+                      boxShadow: "0 0 0 2px rgba(129, 140, 248, 0.2)"
                     },
                   },
                 }}
@@ -1132,9 +1181,9 @@ export default function Chat() {
             <IconButton
               onClick={() => fileInputRef.current.click()}
               sx={{ 
-                color: "#4db6ac",
-                bgcolor: "rgba(255, 255, 255, 0.05)",
-                "&:hover": { bgcolor: "rgba(0, 150, 136, 0.2)" }
+                color: "#818cf8",
+                bgcolor: "rgba(71, 85, 105, 0.3)",
+                "&:hover": { bgcolor: "rgba(99, 102, 241, 0.3)" }
               }}
             >
               <MdUploadFile size={24} />
@@ -1154,9 +1203,9 @@ export default function Chat() {
               disabled={loading || (!inputText.trim() && !imageFile)}
               sx={{ 
                 color: "white",
-                bgcolor: "#00897b",
-                "&:hover": { bgcolor: "#00695c" },
-                "&:disabled": { bgcolor: "rgba(0, 137, 123, 0.5)" }
+                bgcolor: "#6366f1",
+                "&:hover": { bgcolor: "#4f46e5" },
+                "&:disabled": { bgcolor: "rgba(99, 102, 241, 0.5)" }
               }}
             >
               <MdSend size={24} />

@@ -1,9 +1,9 @@
 import React, { useCallback, lazy, Suspense, useState } from "react";
 import { 
   Avatar, Box, Typography, Paper, useTheme, useMediaQuery, Link,
-  IconButton, Collapse
+  IconButton, Collapse, Badge
 } from "@mui/material";
-import { teal, grey } from "@mui/material/colors";
+import { deepPurple, indigo, grey } from "@mui/material/colors";
 import { useAuth } from "../../assets/context/AuthContext";
 import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import ExpandIcon from '@mui/icons-material/Expand';
@@ -37,12 +37,13 @@ const Chatitem = ({ message }) => {
                 parts.push(
                   <Typography
                     key={`txt-${i}`}
-                    color="white"
+                    color="#e2e8f0"
                     sx={{
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-word",
                       my: 1,
                       fontSize: { xs: "0.875rem", sm: "1rem" },
+                      lineHeight: 1.6
                     }}
                   >
                     {textParts.map((part, j) => {
@@ -53,8 +54,15 @@ const Chatitem = ({ message }) => {
                             href={part} 
                             target="_blank" 
                             rel="noopener noreferrer"
-                            color={teal[300]}
-                            sx={{ wordBreak: 'break-all' }}
+                            color="#a5b4fc"
+                            sx={{ 
+                              wordBreak: 'break-all',
+                              textDecoration: 'underline',
+                              fontWeight: 500,
+                              '&:hover': {
+                                color: '#818cf8'
+                              }
+                            }}
                           >
                             {part}
                           </Link>
@@ -68,12 +76,13 @@ const Chatitem = ({ message }) => {
                 parts.push(
                   <Typography
                     key={`txt-${i}`}
-                    color="white"
+                    color="#e2e8f0"
                     sx={{
                       whiteSpace: "pre-wrap",
                       wordBreak: "break-word",
                       my: 1,
                       fontSize: { xs: "0.875rem", sm: "1rem" },
+                      lineHeight: 1.6
                     }}
                   >
                     {seg}
@@ -94,23 +103,37 @@ const Chatitem = ({ message }) => {
               <Box
                 key={`code-${i}`}
                 sx={{
-                  my: 1,
+                  my: 2,
                   width: "100%",
                   overflowX: "auto",
                   borderRadius: 1,
+                  border: "1px solid rgba(71, 85, 105, 0.5)",
+                  boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)"
                 }}
               >
-                <Suspense fallback={<Typography sx={{ color: grey[500] }}>Loading code…</Typography>}>
+                <Suspense fallback={
+                  <Box sx={{ 
+                    bgcolor: "#0f172a", 
+                    p: 2, 
+                    borderRadius: 1,
+                    color: "#94a3b8",
+                    fontFamily: 'monospace',
+                    fontSize: isSmall ? "0.75rem" : "0.875rem"
+                  }}>
+                    Loading code...
+                  </Box>
+                }>
                   <SyntaxHighlighter
                     language={lang}
                     style={coldarkDark}
                     customStyle={{
                       margin: 0,
-                      background: "#011627",
+                      background: "#0f172a",
                       color: "#d6deeb",
                       borderRadius: 4,
                       fontSize: isSmall ? "0.75rem" : "0.875rem",
                       padding: "1rem",
+                      border: "1px solid rgba(71, 85, 105, 0.3)"
                     }}
                   >
                     {code}
@@ -134,8 +157,15 @@ const Chatitem = ({ message }) => {
                 href={part} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                color={teal[300]}
-                sx={{ wordBreak: 'break-all' }}
+                color="#a5b4fc"
+                sx={{ 
+                  wordBreak: 'break-all',
+                  textDecoration: 'underline',
+                  fontWeight: 500,
+                  '&:hover': {
+                    color: '#818cf8'
+                  }
+                }}
               >
                 {part}
               </Link>
@@ -145,11 +175,12 @@ const Chatitem = ({ message }) => {
             <Typography
               key={i}
               component="span"
-              color="white"
+              color="#e2e8f0"
               sx={{
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
                 fontSize: { xs: "0.875rem", sm: "1rem" },
+                lineHeight: 1.6
               }}
             >
               {part}
@@ -160,12 +191,13 @@ const Chatitem = ({ message }) => {
 
       return (
         <Typography
-          color="white"
+          color="#e2e8f0"
           sx={{
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
             my: 1,
             fontSize: { xs: "0.875rem", sm: "1rem" },
+            lineHeight: 1.6
           }}
         >
           {message}
@@ -180,84 +212,149 @@ const Chatitem = ({ message }) => {
   };
 
   return (
-    <Paper
-      elevation={0}
+    <Box
       sx={{
         display: "flex",
-        p: { xs: 1, sm: 2 },
-        mb: { xs: 0.5, sm: 1 },
-        bgcolor: isBot ? "rgba(0,77,86,0.8)" : "rgba(0,77,86,0.1)",
-        borderRadius: 2,
+        mb: 2,
         alignItems: "flex-start",
         position: 'relative',
+        maxWidth: '100%',
+        alignSelf: isBot ? 'flex-start' : 'flex-end',
       }}
     >
-      <Avatar
+      {isBot && (
+        <Avatar
+          sx={{
+            bgcolor: "rgba(99, 102, 241, 0.9)",
+            mr: 2,
+            width: { xs: 32, sm: 40 },
+            height: { xs: 32, sm: 40 },
+            flexShrink: 0,
+            mt: 0.5,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+          }}
+        >
+          <Box 
+            component="img" 
+            src="/openai.png" 
+            alt="bot" 
+            sx={{ 
+              width: '24px', 
+              height: '24px',
+              filter: 'invert(1)'
+            }} 
+          />
+        </Avatar>
+      )}
+      
+      <Paper
+        elevation={0}
         sx={{
-          bgcolor: isBot ? teal[700] : grey[900],
-          mr: 2,
-          width: { xs: 32, sm: 40 },
-          height: { xs: 32, sm: 40 },
-          flexShrink: 0,
+          display: "flex",
+          p: { xs: 1.5, sm: 2 },
+          bgcolor: isBot ? "rgba(30, 41, 59, 0.8)" : "rgba(30, 41, 59, 0.6)",
+          borderRadius: 2.5,
+          flex: 1,
+          border: "1px solid",
+          borderColor: isBot 
+            ? "rgba(99, 102, 241, 0.3)" 
+            : "rgba(71, 85, 105, 0.3)",
+          boxShadow: "0 4px 10px rgba(0, 0, 0, 0.15)",
+          maxWidth: { xs: '85%', sm: '90%' },
+          flexDirection: 'column'
         }}
       >
-        {isBot ? (
-          <img src="/openai.png" alt="bot" width="24" height="24" />
-        ) : (
-          auth.user?.name?.[0] || "U"
-        )}
-      </Avatar>
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        {image && (
-          <Box sx={{ mb: 1, position: 'relative' }}>
-            <Collapse in={expanded} collapsedSize={200}>
-              <img 
-                src={image} 
-                alt="User uploaded" 
-                style={{ 
-                  width: '100%', 
-                  borderRadius: '8px',
-                  maxHeight: expanded ? '70vh' : '200px',
-                  objectFit: 'contain',
-                  cursor: 'pointer',
-                  backgroundColor: grey[900]
-                }}
+        <Box sx={{ flex: 1, overflow: 'hidden' }}>
+          {image && (
+            <Box sx={{ mb: 1.5, position: 'relative' }}>
+              <Collapse in={expanded} collapsedSize={200}>
+                <Box
+                  component="img" 
+                  src={image} 
+                  alt="User uploaded" 
+                  sx={{ 
+                    width: '100%', 
+                    borderRadius: '8px',
+                    maxHeight: expanded ? '70vh' : '200px',
+                    objectFit: 'contain',
+                    cursor: 'pointer',
+                    backgroundColor: grey[900],
+                    border: '1px solid rgba(71, 85, 105, 0.3)',
+                    boxSizing: 'border-box'
+                  }}
+                  onClick={handleToggleExpand}
+                />
+              </Collapse>
+              <IconButton
+                size="small"
                 onClick={handleToggleExpand}
-              />
-            </Collapse>
-            <IconButton
-              size="small"
-              onClick={handleToggleExpand}
+                sx={{
+                  position: 'absolute',
+                  bottom: 8,
+                  right: 8,
+                  backgroundColor: 'rgba(15, 23, 42, 0.7)',
+                  color: '#e2e8f0',
+                  backdropFilter: 'blur(4px)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(99, 102, 241, 0.5)',
+                  }
+                }}
+              >
+                {expanded ? <CloseFullscreenIcon /> : <ExpandIcon />}
+              </IconButton>
+            </Box>
+          )}
+          {content ? (
+            formatMessage(content)
+          ) : image ? (
+            <Typography
+              color="#94a3b8"
               sx={{
-                position: 'absolute',
-                bottom: 8,
-                right: 8,
-                backgroundColor: 'rgba(0,0,0,0.5)',
-                color: 'white',
-                '&:hover': {
-                  backgroundColor: 'rgba(0,0,0,0.7)',
-                }
+                fontStyle: 'italic',
+                fontSize: { xs: "0.875rem", sm: "1rem" },
               }}
             >
-              {expanded ? <CloseFullscreenIcon /> : <ExpandIcon />}
-            </IconButton>
-          </Box>
-        )}
-        {content ? (
-          formatMessage(content)
-        ) : image ? (
-          <Typography
-            color="white"
+              {isBot ? "Here's what I see in the image:" : "Sent an image"}
+            </Typography>
+          ) : null}
+        </Box>
+      </Paper>
+      
+      {!isBot && (
+        <Badge
+          overlap="circular"
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          badgeContent={
+            <Avatar
+              sx={{
+                width: 24,
+                height: 24,
+                bgcolor: 'rgba(99, 102, 241, 0.9)',
+                border: '2px solid #0f172a'
+              }}
+            >
+              <Typography variant="caption" sx={{ fontSize: '0.75rem' }}>
+                U
+              </Typography>
+            </Avatar>
+          }
+          sx={{ ml: 1.5 }}
+        >
+          <Avatar
             sx={{
-              fontStyle: 'italic',
-              fontSize: { xs: "0.875rem", sm: "1rem" },
+              bgcolor: "rgba(71, 85, 105, 0.9)",
+              width: { xs: 32, sm: 40 },
+              height: { xs: 32, sm: 40 },
+              flexShrink: 0,
+              mt: 0.5,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
             }}
           >
-            {isBot ? "Here's what I see in the image:" : "Sent an image"}
-          </Typography>
-        ) : null}
-      </Box>
-    </Paper>
+            {auth.user?.name?.[0] || "U"}
+          </Avatar>
+        </Badge>
+      )}
+    </Box>
   );
 };
 

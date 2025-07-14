@@ -1,25 +1,61 @@
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-const mailSender = async (email,title, body) =>{
-try {
-    let transporter = nodemailer.createTransport({
-        host: process.env.MAIL_HOST,
-        auth: {
-            user: process.env.MAIL_USER,
-            pass: process.env.MAIL_PASS,
-        }
-    });
-    let info = await transporter.sendMail({
-        from: 'stark123@email.com',
-        to: email,
-        subject: title,
-        html: body
-    });
-    console. log("Email Info:",info);
-    return info
-} catch (error) {
-    console.log(error.message);
-}
+// Configure SendGrid
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
-}
-module.exports = mailSender
+const sendOtpEmail = async (email, otp) => {
+  try {
+    const msg = {
+      to: email,
+      from: {
+        email: process.env.SENDGRID_VERIFIED_SENDER,
+        name: process.env.SENDGRID_SENDER_NAME || 'Your App Name'
+      },
+      subject: 'Your One-Time Password (OTP)',
+      text: `Your OTP code is: ${otp}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #6366f1; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0;">OTP Verification</h1>
+          </div>
+          <div style="padding: 30px; background-color: #f9fafb;">
+            <p style="font-size: 16px; color: #374151;">Hello,</p>
+            <p style="font-size: 16px; color: #374151;">
+              Your one-time password for verification is:
+            </p>
+            <div style="text-align: center; margin: 30px 0;">
+              <div style="
+                display: inline-block;
+                padding: 15px 30px;
+                background-color: #e0e7ff;
+                border-radius: 8px;
+                font-size: 28px;
+                font-weight: bold;
+                letter-spacing: 5px;
+                color: #4f46e5;
+              ">
+                ${otp}
+              </div>
+            </div>
+            <p style="font-size: 14px; color: #6b7280;">
+              This OTP is valid for 5 minutes. Please do not share this code with anyone.
+            </p>
+          </div>
+          <div style="padding: 20px; text-align: center; background-color: #f3f4f6; color: #6b7280; font-size: 14px;">
+            <p>If you didn't request this OTP, please ignore this email.</p>
+            <p>&copy; ${new Date().getFullYear()} ${process.env.SENDGRID_SENDER_NAME || 'Your App Name'}</p>
+          </div>
+        </div>
+      `,
+    };
+
+    await sgMail.send(msg);
+    console.log(`OTP email sent to ${email}`);
+    return true;
+  } catch (error) {
+    console.error('SendGrid error:', error.response?.body || error.message);
+    throw new Error('Failed to send OTP email');
+  }
+};
+
+module.exports = sendOtpEmail;

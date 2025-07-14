@@ -14,6 +14,27 @@ const getCookieSettings = () => ({
   maxAge: 7 * 24 * 60 * 60 * 1000,
 });
 
+// Enhanced OTP handling with expiration validation
+const getValidOTPRecord = async (email) => {
+  const otpRecord = await OTP.findOne({ email });
+  
+  if (!otpRecord) {
+    return null;
+  }
+  
+  // Check if OTP is expired (5 minutes)
+  const now = new Date();
+  const createdAt = new Date(otpRecord.createdAt);
+  const diffInMinutes = Math.floor((now - createdAt) / (1000 * 60));
+  
+  if (diffInMinutes > 5) {
+    await OTP.deleteOne({ _id: otpRecord._id });
+    return null;
+  }
+  
+  return otpRecord;
+};
+
 // GET all users
 const getAllUsers = async (req, res) => {
   try {
@@ -34,6 +55,12 @@ const sendOtp = async (req, res) => {
       return res.status(400).json({ message: "Email is required" });
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -44,15 +71,16 @@ const sendOtp = async (req, res) => {
 
     // Generate OTP
     const otp = otpGenerator.generate(6, {
-      upperCaseAlphabets: false,
+      digits: true,
       lowerCaseAlphabets: false,
+      upperCaseAlphabets: false,
       specialChars: false,
     });
 
     // Delete any existing OTPs for this email
     await OTP.deleteMany({ email });
 
-    // Create new OTP with 5-minute expiration
+    // Create new OTP
     await OTP.create({ email, otp });
 
     // Send email
@@ -77,8 +105,13 @@ const userSignup = async (req, res) => {
   try {
     const { name, email, password, otp } = req.body;
 
+    // Validation
     if (!name || !email || !password || !otp) {
       return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
     }
 
     // Check if user already exists
@@ -87,8 +120,8 @@ const userSignup = async (req, res) => {
       return res.status(409).json({ message: "User already registered" });
     }
 
-    // Find OTP record
-    const otpRecord = await OTP.findOne({ email });
+    // Find and validate OTP
+    const otpRecord = await getValidOTPRecord(email);
     if (!otpRecord) {
       return res.status(400).json({
         message: 'OTP expired or not requested',
