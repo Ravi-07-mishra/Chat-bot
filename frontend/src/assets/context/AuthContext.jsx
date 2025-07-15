@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { loginUser, signupUser, checkAuthStatus, sendOtp } from "../../helpers/api-communicator";
+import { loginUser, signupUser, checkAuthStatus } from "../../helpers/api-communicator";
 import { useNavigate, useLocation } from "react-router-dom";
 import api from "../../api";
 

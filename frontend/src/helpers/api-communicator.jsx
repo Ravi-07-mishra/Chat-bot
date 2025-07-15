@@ -85,56 +85,50 @@ export function streamChat({ message, conversationId, image, onChunk, onDone, on
       const reader = res.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
-      let currentEvent = null;
 
-      const processBuffer = () => {
-        // Keep splitting on the double newline that terminates an SSE frame
-        const parts = buffer.split('\n\n');
-        // Process all complete frames (all but last)
-        parts.slice(0, -1).forEach((frame) => {
-          const lines = frame.split('\n');
-          lines.forEach((line) => {
+      const processChunk = () => {
+        // Process complete events separated by double newline
+        while (buffer.includes('\n\n')) {
+          const eventEndIndex = buffer.indexOf('\n\n');
+          const eventData = buffer.substring(0, eventEndIndex);
+          buffer = buffer.substring(eventEndIndex + 2);
+          
+          const lines = eventData.split('\n');
+          let eventType = 'message';
+          let dataContent = '';
+          
+          for (const line of lines) {
             if (line.startsWith('event:')) {
-              currentEvent = line.replace('event:', '').trim();
+              eventType = line.replace('event:', '').trim();
+            } else if (line.startsWith('data:')) {
+              dataContent = line.replace('data:', '').trim();
             }
-            if (line.startsWith('data:')) {
-              try {
-                const data = JSON.parse(line.replace(/^data:\s*/, ''));
-                if (currentEvent === 'chunk' && data.part) {
-                  onChunk(data.part);
-                }
-                if (currentEvent === 'done' && data.text) {
-                  onDone(data.text, data.conversationId);
-                }
-              } catch {
-                // ignore JSON parse errors
-              }
+          }
+          
+          try {
+            const data = JSON.parse(dataContent);
+            if (eventType === 'chunk' && data.part) {
+              onChunk(data.part);
+            } else if (eventType === 'done' && data.text) {
+              onDone(data.text, data.conversationId);
             }
-          });
-          currentEvent = null;
-        });
-        // Save last (possibly incomplete) chunk back to buffer
-        buffer = parts[parts.length - 1];
+          } catch (err) {
+            console.error('Error parsing event:', { eventType, dataContent }, err);
+          }
+        }
       };
 
       const readLoop = () =>
         reader.read().then(({ done, value }) => {
           if (done) {
-            // Process any remaining buffer as a final 'done'
             if (buffer.trim()) {
-              try {
-                const data = JSON.parse(buffer.replace(/^data:\s*/, ''));
-                if (data.text) {
-                  onDone(data.text, data.conversationId);
-                }
-              } catch {
-                onError('Invalid SSE response');
-              }
+              console.warn('Unprocessed buffer content:', buffer);
             }
             return;
           }
+          
           buffer += decoder.decode(value, { stream: true });
-          processBuffer();
+          processChunk();
           return readLoop();
         });
 
@@ -177,41 +171,49 @@ export function uploadFile({ file, text, conversationId, onChunk, onDone, onErro
         throw new Error(`Upload failed: ${response.status}`);
       }
       
-      // Check for SSE content type
       const contentType = response.headers.get('Content-Type');
       if (!contentType || !contentType.includes('text/event-stream')) {
         throw new Error('Invalid response format');
       }
       
-      // Setup SSE parser
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       
       const processEvents = () => {
-        const events = buffer.split('\n\n');
-        buffer = events.pop() || '';
-        
-        for (const event of events) {
-          const [typeLine, dataLine] = event.split('\n');
-          const type = typeLine.replace('event: ', '').trim();
-          const data = dataLine ? dataLine.replace('data: ', '') : null;
+        // Process complete events separated by double newline
+        while (buffer.includes('\n\n')) {
+          const eventEndIndex = buffer.indexOf('\n\n');
+          const eventData = buffer.substring(0, eventEndIndex);
+          buffer = buffer.substring(eventEndIndex + 2);
+          
+          const lines = eventData.split('\n');
+          let eventType = 'message';
+          let dataContent = '';
+          
+          for (const line of lines) {
+            if (line.startsWith('event:')) {
+              eventType = line.replace('event:', '').trim();
+            } else if (line.startsWith('data:')) {
+              dataContent = line.replace('data:', '').trim();
+            }
+          }
           
           try {
-            const payload = data ? JSON.parse(data) : {};
+            const payload = dataContent ? JSON.parse(dataContent) : null;
             
-            switch (type) {
+            switch (eventType) {
               case 'chunk':
-                if (payload.part) onChunk(payload.part);
+                if (payload?.part) onChunk(payload.part);
                 break;
               case 'done':
-                if (payload.text) onDone(payload.text, payload.conversationId);
+                if (payload?.text) onDone(payload.text, payload.conversationId);
                 break;
               case 'error':
-                if (payload.error) onError(payload.error);
+                if (payload?.error) onError(payload.error);
                 break;
               default:
-                console.warn('Unknown SSE event type:', type);
+                console.warn('Unknown SSE event type:', eventType);
             }
           } catch (err) {
             console.error('Error parsing SSE event:', err);
@@ -222,7 +224,9 @@ export function uploadFile({ file, text, conversationId, onChunk, onDone, onErro
       const readChunk = () => {
         reader.read().then(({ value, done }) => {
           if (done) {
-            if (buffer) processEvents();
+            if (buffer.trim()) {
+              console.warn('Unprocessed buffer content:', buffer);
+            }
             return;
           }
           
