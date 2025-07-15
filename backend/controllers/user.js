@@ -1,3 +1,4 @@
+// controllers/userController.js
 const User = require("../models/User");
 const OTP = require("../models/otpmodel");
 const bcrypt = require("bcryptjs");
@@ -83,7 +84,7 @@ const sendOtp = async (req, res) => {
     // Create new OTP
     await OTP.create({ email, otp });
 
-    // Send email
+    // Send email via Brevo
     await sendOtpEmail(email, otp);
 
     res.status(200).json({
