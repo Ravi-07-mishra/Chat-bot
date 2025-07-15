@@ -6,16 +6,13 @@ function getCookie(name) {
   const parts = value.split(`; ${name}=`);
   if (parts.length === 2) return parts.pop().split(';').shift();
 }
-
-export const sendOtp = async (email) => {
-  const res = await api.post('/user/sendotp', { email });
-  return res.data;
-};
-
-export const signupUser = async (name, email, password, otp) => {
-  const res = await api.post('/user/signup', { name, email, password, otp });
+// authAPI.js
+export const signupUser = async (name, email, password) => {
+  const res = await api.post('/user/signup', { name, email, password });
   return res.data.user;
 };
+
+// Remove the sendOtp function entirely
 
 export const loginUser = async (email, password) => {
   const res = await api.post('/user/login', { email, password });

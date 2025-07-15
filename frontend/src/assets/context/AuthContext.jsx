@@ -55,30 +55,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async (name, email, password, otp) => {
-    setIsLoading(true);
-    try {
-      const data = await signupUser(name, email, password, otp);
-      setUser({ email: data.email, name: data.name });
-      setIsLoggedIn(true);
-      navigate("/chat", { replace: true });
-    } catch (error) {
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const sendOtpToEmail = async (email) => {
-    setIsLoading(true);
-    try {
-      await sendOtp(email);
-    } catch (error) {
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+ const signup = async (name, email, password) => {
+  setIsLoading(true);
+  try {
+    const data = await signupUser(name, email, password);
+    // Set the complete user object including id
+    setUser({ id: data.id, email: data.email, name: data.name });
+    setIsLoggedIn(true);
+    navigate("/chat", { replace: true });
+  } catch (error) {
+    throw error;
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const logout = async () => {
     setIsLoading(true);
@@ -105,7 +95,6 @@ export const AuthProvider = ({ children }) => {
         isLoading,
         login,
         signup,
-        sendOtp: sendOtpToEmail,
         logout,
       }}
     >
